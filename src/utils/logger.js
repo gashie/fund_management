@@ -3,6 +3,8 @@
  * Logs requests, responses, external calls in structured format
  */
 
+const { actCode } = require('../../config/actcodes');
+
 const colors = {
     reset: '\x1b[0m',
     bright: '\x1b[1m',
@@ -154,39 +156,24 @@ const httpLogger = {
 };
 
 // ============================================================================
-// GIP Action Code Mappings (GhIPSS)
+// GIP Action Code Mappings (for logging display only)
+// NOTE: For business logic, use gip.service.js functions instead
+// (Local copy here to avoid circular dependency with gip.service)
 // ============================================================================
-const GIP_ACTION_CODES = {
-    '000': 'Success',
-    '001': 'Invalid/Missing field',
-    '003': 'Invalid amount',
-    '005': 'Do not honor',
-    '012': 'Invalid transaction',
-    '013': 'Invalid amount',
-    '014': 'Invalid account number',
-    '030': 'Format error',
-    '051': 'Insufficient funds',
-    '054': 'Expired card',
-    '055': 'Incorrect PIN',
-    '056': 'No card record',
-    '057': 'Transaction not permitted',
-    '058': 'Terminal not permitted',
-    '061': 'Exceeds limit',
-    '065': 'Exceeds frequency limit',
-    '068': 'Timeout - late response',
-    '075': 'PIN tries exceeded',
-    '091': 'Issuer unavailable',
-    '092': 'Destination not found',
-    '094': 'Duplicate transaction',
-    '096': 'System malfunction',
-    '381': 'Not at receiving institution',
-    '909': 'System error',
-    '912': 'Issuer unavailable',
-    '990': 'Being processed',
-    '999': 'Validation error'
-};
+const GIP_ACTION_CODES = actCode.reduce((map, item) => {
+    map[item.code] = item.message;
+    return map;
+}, {});
 
-const getActionCodeReason = (code) => GIP_ACTION_CODES[code] || 'Unknown error';
+// Async codes - request accepted, callback coming
+const ASYNC_SUCCESS_CODES = ['001'];
+
+// Success codes
+const SUCCESS_CODES = ['000', '300', '480', '385'];
+
+const getActionCodeReason = (code) => GIP_ACTION_CODES[code] || 'Unknown';
+const isAsyncSuccess = (code) => ASYNC_SUCCESS_CODES.includes(code);
+const isSuccessCode = (code) => SUCCESS_CODES.includes(code);
 
 // ============================================================================
 // External API Call Logger (GIP)
@@ -216,29 +203,39 @@ const gipLogger = {
     /**
      * Log GIP response
      * Format: HH:mm:ss ⇐ GIP NEC 000 SUCCESS 125ms
+     * For async (001): shows PENDING with approvalCode
      * For failures: shows reason why
      */
     response: (type, result, duration) => {
         const arrow = `${colors.bright}${colors.magenta}⇐${colors.reset}`;
         const code = result.actionCode || result.data?.actionCode || '???';
-        const codeColor = code === '000' ? colors.green : colors.red;
-        const status = code === '000' ? 'OK' : 'FAIL';
+        const data = result.data || {};
 
-        // Get reason for the code
+        // Determine status: 000/300/480/385=OK, 001=PENDING (async), others=FAIL
+        const isSuccess = isSuccessCode(code);
+        const isAsync = isAsyncSuccess(code);
+        const isFail = !isSuccess && !isAsync;
+
+        const codeColor = isFail ? colors.red : (isAsync ? colors.yellow : colors.green);
+        const status = isSuccess ? 'OK' : (isAsync ? 'PENDING' : 'FAIL');
+
+        // Get reason/message for the code
         const reason = getActionCodeReason(code);
 
         // Extra info based on response type
         let extra = '';
         if (result.accountName) {
+            // NEC response - show account name
             extra = ` ${colors.gray}name:${truncate(result.accountName, 15)}${colors.reset}`;
-        } else if (code !== '000') {
-            // Show reason for failures
+        } else if (isAsync) {
+            // Async processing - show approvalCode message
+            const approval = data.approvalCode || reason;
+            extra = ` ${colors.yellow}[${truncate(approval, 30)}]${colors.reset}`;
+        } else if (isFail) {
+            // Failure - show reason
             extra = ` ${colors.red}[${reason}]${colors.reset}`;
-            // Show additional details from GIP response if available
-            const data = result.data || {};
-            if (data.statusCode) extra += ` ${colors.gray}status:${data.statusCode}${colors.reset}`;
+            if (data.approvalCode) extra += ` ${colors.gray}${truncate(data.approvalCode, 30)}${colors.reset}`;
             if (data.errorMessage) extra += ` ${colors.gray}${truncate(data.errorMessage, 30)}${colors.reset}`;
-            if (data.message) extra += ` ${colors.gray}${truncate(data.message, 30)}${colors.reset}`;
         }
 
         console.log(
@@ -250,8 +247,8 @@ const gipLogger = {
             extra
         );
 
-        // For failures, log full response on next line for debugging
-        if (code !== '000' && result.data) {
+        // For actual failures, log full response on next line for debugging
+        if (isFail && result.data) {
             console.log(`${ts()}    ${colors.gray}└─ Response: ${JSON.stringify(result.data)}${colors.reset}`);
         }
     },
@@ -388,5 +385,9 @@ module.exports = {
     methodColor,
     // GIP codes
     GIP_ACTION_CODES,
-    getActionCodeReason
+    ASYNC_SUCCESS_CODES,
+    SUCCESS_CODES,
+    getActionCodeReason,
+    isAsyncSuccess,
+    isSuccessCode
 };

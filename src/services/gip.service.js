@@ -1,11 +1,83 @@
 /**
  * GIP Service
  * External API calls to GIP - Functional style
+ * Central source for GIP action codes and response handling
  */
 
 const axios = require('axios');
 const config = require('../config');
 const { gipLogger } = require('../utils/logger');
+const { actCode } = require('../../config/actcodes');
+
+// ============================================================================
+// GIP ACTION CODES (from config/actcodes.js)
+// ============================================================================
+
+// Build lookup map: code -> message
+const ACTION_CODES = actCode.reduce((map, item) => {
+    map[item.code] = item.message;
+    return map;
+}, {});
+
+// Success codes - transaction completed successfully
+const SUCCESS_CODES = ['000', '300', '480', '385'];
+
+// Async codes - request accepted, callback will follow
+const ASYNC_CODES = ['001'];
+
+// Retry codes - temporary failure, try again
+const RETRY_CODES = ['909', '912', '990', '911', '091'];
+
+// Fatal failure codes - do not retry
+const FATAL_CODES = ['114', '116', '999', '100', '125', '381'];
+
+/**
+ * Get human-readable message for action code
+ */
+const getActionMessage = (code) => ACTION_CODES[code] || 'Unknown';
+
+/**
+ * Check if action code indicates success
+ */
+const isSuccess = (code) => SUCCESS_CODES.includes(code);
+
+/**
+ * Check if action code indicates async processing (callback coming)
+ */
+const isAsync = (code) => ASYNC_CODES.includes(code);
+
+/**
+ * Check if action code indicates a retryable error
+ */
+const isRetryable = (code) => RETRY_CODES.includes(code);
+
+/**
+ * Check if action code indicates fatal failure (no retry)
+ */
+const isFatal = (code) => FATAL_CODES.includes(code);
+
+/**
+ * Analyze GIP response and determine action
+ * Returns: { status, message, shouldRetry, isFinal }
+ */
+const analyzeResponse = (actionCode, approvalCode = null) => {
+    const message = approvalCode || getActionMessage(actionCode);
+
+    if (isSuccess(actionCode)) {
+        return { status: 'SUCCESS', message, shouldRetry: false, isFinal: true };
+    }
+    if (isAsync(actionCode)) {
+        return { status: 'PENDING', message, shouldRetry: false, isFinal: false };
+    }
+    if (isRetryable(actionCode)) {
+        return { status: 'RETRY', message, shouldRetry: true, isFinal: false };
+    }
+    if (isFatal(actionCode)) {
+        return { status: 'FAILED', message, shouldRetry: false, isFinal: true };
+    }
+    // Unknown code - treat as retryable
+    return { status: 'UNKNOWN', message, shouldRetry: true, isFinal: false };
+};
 
 const client = axios.create({
     timeout: config.gip.timeout,
@@ -292,14 +364,32 @@ const isInconclusive = (actionCode) => {
 };
 
 module.exports = {
+    // Formatting
     formatAmount,
     formatTimestamp,
+
+    // API calls
     makeRequest,
     nameEnquiry,
     fundsTransferDebit,
     fundsTransferCredit,
     reversal,
     transactionStatusQuery,
+
+    // TSQ helpers
     determineTsqAction,
-    isInconclusive
+    isInconclusive,
+
+    // Action code helpers (use throughout system)
+    ACTION_CODES,
+    SUCCESS_CODES,
+    ASYNC_CODES,
+    RETRY_CODES,
+    FATAL_CODES,
+    getActionMessage,
+    isSuccess,
+    isAsync,
+    isRetryable,
+    isFatal,
+    analyzeResponse
 };
