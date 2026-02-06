@@ -1,0 +1,57 @@
+{
+  "name": "bulk-payment",
+  "version": "1.0.0",
+  "description": "bulk payment",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "dev:old": "nodemon server.js",
+    "workers": "node -e \"process.env.START_WORKERS='only'; require('./src/server.js')\"",
+    "migrate": "psql -d fund_management -f migrations/001_improved_schema.sql && psql -d fund_management -f migrations/002_feature_tables.sql && psql -d fund_management -f migrations/003_seed_participants.sql",
+    "seed": "psql -d fund_management -f migrations/003_seed_participants.sql"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gashie/npra_bulk_payment.git"
+  },
+  "keywords": [
+    "bulk",
+    "payment",
+    "npra"
+  ],
+  "author": "Gashie+Karece+GhiPPS",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/gashie/npra_bulk_payment/issues"
+  },
+  "homepage": "https://github.com/gashie/npra_bulk_payment#readme",
+  "dependencies": {
+    "axios": "^1.7.7",
+    "colors": "^1.4.0",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "generate-api-key": "^1.0.2",
+    "helmet": "^7.1.0",
+    "humps": "^2.0.1",
+    "joi": "^17.13.3",
+    "jsonwebtoken": "^9.0.2",
+    "lodash": "^4.17.21",
+    "morgan": "^1.10.0",
+    "node-cache": "^5.1.2",
+    "node-device-detector": "^2.1.3",
+    "nodemailer": "^8.0.0",
+    "pg": "^8.12.0",
+    "simple-encryptor": "^4.0.0",
+    "uuid": "^11.1.0",
+    "winston": "^3.14.2",
+    "winston-daily-rotate-file": "^5.0.0",
+    "xml2js": "^0.6.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}

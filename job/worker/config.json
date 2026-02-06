@@ -1,0 +1,7 @@
+{
+  "tsq": {
+    "startDelayMinutes": 1,
+    "intervalMinutes": 5,
+    "maxIterations": 3
+  }
+}

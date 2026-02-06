@@ -1,0 +1,1589 @@
+{
+	"info": {
+		"_postman_id": "fund-management-api-v2",
+		"name": "Fund Management API v2.0",
+		"description": "API collection for GIP-based fund transfers and account management system",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3002/api",
+			"type": "string"
+		},
+		{
+			"key": "apiKey",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "institutionId",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"auth": {
+		"type": "apikey",
+		"apikey": [
+			{
+				"key": "key",
+				"value": "X-API-Key",
+				"type": "string"
+			},
+			{
+				"key": "value",
+				"value": "{{apiKey}}",
+				"type": "string"
+			},
+			{
+				"key": "in",
+				"value": "header",
+				"type": "string"
+			}
+		]
+	},
+	"item": [
+		{
+			"name": "Health & Status",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/health",
+							"host": ["{{baseUrl}}"],
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "Get Stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/stats",
+							"host": ["{{baseUrl}}"],
+							"path": ["stats"]
+						}
+					}
+				},
+				{
+					"name": "Get All Feature Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "status"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Institution Management",
+			"item": [
+				{
+					"name": "Create Institution",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Test Bank\",\n    \"code\": \"TB001\",\n    \"bankCode\": \"300001\",\n    \"callbackUrl\": \"https://example.com/callback\",\n    \"isActive\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/institutions",
+							"host": ["{{baseUrl}}"],
+							"path": ["institutions"]
+						}
+					}
+				},
+				{
+					"name": "List Institutions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/institutions",
+							"host": ["{{baseUrl}}"],
+							"path": ["institutions"]
+						}
+					}
+				},
+				{
+					"name": "Get Institution",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/institutions/{{institutionId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["institutions", "{{institutionId}}"]
+						}
+					}
+				},
+				{
+					"name": "Update Institution",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Test Bank Updated\",\n    \"callbackUrl\": \"https://example.com/callback/v2\",\n    \"isActive\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/institutions/{{institutionId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["institutions", "{{institutionId}}"]
+						}
+					}
+				},
+				{
+					"name": "Delete Institution",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/institutions/{{institutionId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["institutions", "{{institutionId}}"]
+						}
+					}
+				},
+				{
+					"name": "Generate Credentials",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Production API Key\",\n    \"permissions\": [\"nec\", \"ft\", \"tsq\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/institutions/{{institutionId}}/credentials",
+							"host": ["{{baseUrl}}"],
+							"path": ["institutions", "{{institutionId}}", "credentials"]
+						}
+					}
+				},
+				{
+					"name": "List Credentials",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/institutions/{{institutionId}}/credentials",
+							"host": ["{{baseUrl}}"],
+							"path": ["institutions", "{{institutionId}}", "credentials"]
+						}
+					}
+				},
+				{
+					"name": "Revoke Credential",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/institutions/{{institutionId}}/credentials/:credentialId",
+							"host": ["{{baseUrl}}"],
+							"path": ["institutions", "{{institutionId}}", "credentials", ":credentialId"],
+							"variable": [
+								{
+									"key": "credentialId",
+									"value": ""
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Transactions",
+			"item": [
+				{
+					"name": "Name Enquiry (NEC)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"srcBankCode\": \"300307\",\n    \"destBankCode\": \"300591\",\n    \"srcAccountNumber\": \"00110104334\",\n    \"destAccountNumber\": \"0246436671\",\n    \"referenceNumber\": \"5156165165\",\n    \"requestTimestamp\": \"2024-01-15 10:00:00\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/nec",
+							"host": ["{{baseUrl}}"],
+							"path": ["nec"]
+						}
+					}
+				},
+				{
+					"name": "Funds Transfer (FT)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "{{$guid}}",
+								"description": "Optional: Prevents duplicate transactions"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"srcBankCode\": \"300307\",\n    \"destBankCode\": \"300591\",\n    \"amount\": 100,\n    \"srcAccountNumber\": \"0011010104334\",\n    \"srcAccountName\": \"Fautina Abdulai\",\n    \"destAccountNumber\": \"0246436671\",\n    \"destAccountName\": \"Kwaku Manu\",\n    \"narration\": \"salary payment - nov23\",\n    \"referenceNumber\": \"876780231217\",\n    \"requestTimestamp\": \"2024-01-15 10:00:00\",\n    \"callbackUrl\": \"https://webhook.site/12345\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/ft",
+							"host": ["{{baseUrl}}"],
+							"path": ["ft"]
+						}
+					}
+				},
+				{
+					"name": "Transaction Status Query (TSQ)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"srcBankCode\": \"300307\",\n    \"transactionReferenceNumber\": \"876780231217\",\n    \"transactionTimestamp\": \"2024-01-15 10:00:00\",\n    \"requestTimestamp\": \"2024-01-15 10:23:00\",\n    \"referenceNumber\": \"7888494932\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/tsq",
+							"host": ["{{baseUrl}}"],
+							"path": ["tsq"]
+						}
+					}
+				},
+				{
+					"name": "Get Transaction by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/transactions/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["transactions", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "List Transactions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/transactions?limit=50&offset=0&status=COMPLETED",
+							"host": ["{{baseUrl}}"],
+							"path": ["transactions"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "50"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								},
+								{
+									"key": "status",
+									"value": "COMPLETED"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Admin",
+			"item": [
+				{
+					"name": "Dashboard",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/dashboard",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "dashboard"]
+						}
+					}
+				},
+				{
+					"name": "System Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/health",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "health"]
+						}
+					}
+				},
+				{
+					"name": "Monitoring Report",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/report",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "report"]
+						}
+					}
+				},
+				{
+					"name": "Worker Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/workers",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "workers"]
+						}
+					}
+				},
+				{
+					"name": "Hourly Trends",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/trends/hourly?hours=24",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "trends", "hourly"],
+							"query": [
+								{
+									"key": "hours",
+									"value": "24"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Status Breakdown",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/status-breakdown?from=2024-01-01&to=2024-12-31",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "status-breakdown"],
+							"query": [
+								{
+									"key": "from",
+									"value": "2024-01-01"
+								},
+								{
+									"key": "to",
+									"value": "2024-12-31"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "API Performance",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/performance?hours=24",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "performance"],
+							"query": [
+								{
+									"key": "hours",
+									"value": "24"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Audit Log",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/audit?limit=100",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "audit"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Institution Stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/institutions/stats",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "institutions", "stats"]
+						}
+					}
+				},
+				{
+					"name": "Failed Transactions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/transactions/failed?limit=50",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "transactions", "failed"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Stuck Transactions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/transactions/stuck?minutes=30",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "transactions", "stuck"],
+							"query": [
+								{
+									"key": "minutes",
+									"value": "30"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "All Transactions (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/transactions?limit=100&offset=0",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "transactions"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Transaction Details",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/transactions/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "transactions", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Transaction Timeline",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/transactions/:id/timeline",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "transactions", ":id", "timeline"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Manual FTC",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/transactions/:id/ftc",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "transactions", ":id", "ftc"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Manual Reversal",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"reason\": \"Customer request\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/transactions/:id/reversal",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "transactions", ":id", "reversal"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Manual TSQ",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/transactions/:id/tsq",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "transactions", ":id", "tsq"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Features - Security",
+			"item": [
+				{
+					"name": "Get Security Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/security/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "security", "status"]
+						}
+					}
+				},
+				{
+					"name": "Rotate API Key",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"gracePeriodHours\": 24\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/features/security/rotate-key",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "security", "rotate-key"]
+						}
+					}
+				},
+				{
+					"name": "Get Fraud Alerts",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/security/fraud-alerts?status=PENDING&limit=50",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "security", "fraud-alerts"],
+							"query": [
+								{
+									"key": "status",
+									"value": "PENDING"
+								},
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Features - Operational",
+			"item": [
+				{
+					"name": "Get Operational Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/operational/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "operational", "status"]
+						}
+					}
+				},
+				{
+					"name": "Bulk - Create Batch",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Salary Payment Batch - January 2024\",\n    \"priority\": \"NORMAL\",\n    \"transactions\": [\n        {\n            \"amount\": 50000,\n            \"debitAccount\": \"1234567890\",\n            \"creditAccount\": \"0987654321\",\n            \"bankCode\": \"300001\",\n            \"narration\": \"Salary - Employee 001\"\n        },\n        {\n            \"amount\": 45000,\n            \"debitAccount\": \"1234567890\",\n            \"creditAccount\": \"1122334455\",\n            \"bankCode\": \"300002\",\n            \"narration\": \"Salary - Employee 002\"\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/features/bulk/batches",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "bulk", "batches"]
+						}
+					}
+				},
+				{
+					"name": "Bulk - Get Batch Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/bulk/batches/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "bulk", "batches", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Scheduled - Create Transfer",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"scheduledFor\": \"2024-02-15T09:00:00Z\",\n    \"amount\": 10000,\n    \"debitAccount\": \"1234567890\",\n    \"creditAccount\": \"0987654321\",\n    \"bankCode\": \"300001\",\n    \"narration\": \"Scheduled rent payment\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/features/scheduled",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "scheduled"]
+						}
+					}
+				},
+				{
+					"name": "Scheduled - Cancel Transfer",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/scheduled/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "scheduled", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Recurring - Create Payment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Monthly Subscription\",\n    \"frequency\": \"MONTHLY\",\n    \"startDate\": \"2024-02-01\",\n    \"endDate\": \"2025-01-01\",\n    \"amount\": 5000,\n    \"debitAccount\": \"1234567890\",\n    \"creditAccount\": \"0987654321\",\n    \"bankCode\": \"300001\",\n    \"narration\": \"Monthly subscription fee\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/features/recurring",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "recurring"]
+						}
+					}
+				},
+				{
+					"name": "Recurring - Get Payment",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/recurring/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "recurring", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Recurring - Pause Payment",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"action\": \"pause\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/features/recurring/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "recurring", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Recurring - Resume Payment",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"action\": \"resume\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/features/recurring/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "recurring", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Templates - Create",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Utility Payment Template\",\n    \"creditAccount\": \"9999888877\",\n    \"bankCode\": \"300001\",\n    \"narration\": \"Utility payment\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/features/templates",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "templates"]
+						}
+					}
+				},
+				{
+					"name": "Templates - List",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/templates",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "templates"]
+						}
+					}
+				},
+				{
+					"name": "Templates - Get",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/templates/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "templates", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Templates - Delete",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/templates/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "templates", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Check Transaction Limits",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/limits?amount=50000&type=FT",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "limits"],
+							"query": [
+								{
+									"key": "amount",
+									"value": "50000"
+								},
+								{
+									"key": "type",
+									"value": "FT"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Features - Alerting",
+			"item": [
+				{
+					"name": "Get Alerting Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/alerting/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "alerting", "status"]
+						}
+					}
+				},
+				{
+					"name": "Get Alerts",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/alerts?severity=CRITICAL&status=ACTIVE&limit=50",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "alerts"],
+							"query": [
+								{
+									"key": "severity",
+									"value": "CRITICAL"
+								},
+								{
+									"key": "status",
+									"value": "ACTIVE"
+								},
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Acknowledge Alert",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"acknowledgedBy\": \"admin@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/features/alerts/:id/acknowledge",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "alerts", ":id", "acknowledge"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Resolve Alert",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"resolvedBy\": \"admin@example.com\",\n    \"resolution\": \"Issue was caused by network timeout. GIP endpoint has recovered.\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/features/alerts/:id/resolve",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "alerts", ":id", "resolve"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get SLA Metrics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/sla?hours=24",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "sla"],
+							"query": [
+								{
+									"key": "hours",
+									"value": "24"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Anomalies",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/anomalies?hours=24",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "anomalies"],
+							"query": [
+								{
+									"key": "hours",
+									"value": "24"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Uptime Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/uptime?hours=24",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "uptime"],
+							"query": [
+								{
+									"key": "hours",
+									"value": "24"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Features - Reporting",
+			"item": [
+				{
+					"name": "Get Reporting Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/reporting/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "reporting", "status"]
+						}
+					}
+				},
+				{
+					"name": "Generate Settlement Report",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"startDate\": \"2024-01-01\",\n    \"endDate\": \"2024-01-31\",\n    \"institutionId\": null\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/features/reports/settlement",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "reports", "settlement"]
+						}
+					}
+				},
+				{
+					"name": "Get Settlement Report",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/reports/settlement/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "reports", "settlement", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Export Report (JSON)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/reports/:id/export?format=json",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "reports", ":id", "export"],
+							"query": [
+								{
+									"key": "format",
+									"value": "json"
+								}
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Export Report (CSV)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/reports/:id/export?format=csv",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "reports", ":id", "export"],
+							"query": [
+								{
+									"key": "format",
+									"value": "csv"
+								}
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Fee Configurations",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/fees/config",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "fees", "config"]
+						}
+					}
+				},
+				{
+					"name": "Create Fee Configuration",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"institutionId\": \"{{institutionId}}\",\n    \"transactionType\": \"FT\",\n    \"feeType\": \"PERCENTAGE\",\n    \"feeValue\": 0.5,\n    \"minFee\": 1,\n    \"maxFee\": 100,\n    \"isActive\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/features/fees/config",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "fees", "config"]
+						}
+					}
+				},
+				{
+					"name": "Get Invoices",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/invoices?status=PENDING&limit=20",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "invoices"],
+							"query": [
+								{
+									"key": "status",
+									"value": "PENDING"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Generate Invoice",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"institutionId\": \"{{institutionId}}\",\n    \"month\": 1,\n    \"year\": 2024\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/features/invoices",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "invoices"]
+						}
+					}
+				},
+				{
+					"name": "Get Trend Analysis",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/analytics/trends?days=30",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "analytics", "trends"],
+							"query": [
+								{
+									"key": "days",
+									"value": "30"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Features - Resilience",
+			"item": [
+				{
+					"name": "Get Resilience Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/resilience/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "resilience", "status"]
+						}
+					}
+				},
+				{
+					"name": "Get Circuit Breaker Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/circuit-breaker",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "circuit-breaker"]
+						}
+					}
+				},
+				{
+					"name": "Reset Circuit Breaker",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/circuit-breaker/:serviceName/reset",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "circuit-breaker", ":serviceName", "reset"],
+							"variable": [
+								{
+									"key": "serviceName",
+									"value": "GIP_API"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Queue Stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/queue/stats",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "queue", "stats"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Features - Developer",
+			"item": [
+				{
+					"name": "Get Developer Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/developer/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "developer", "status"]
+						}
+					}
+				},
+				{
+					"name": "Get API Documentation",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/docs",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "docs"]
+						}
+					}
+				},
+				{
+					"name": "Get Sandbox History",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/sandbox/history?type=FT&limit=50",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "sandbox", "history"],
+							"query": [
+								{
+									"key": "type",
+									"value": "FT"
+								},
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Clear Sandbox Data",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/sandbox",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "sandbox"]
+						}
+					}
+				},
+				{
+					"name": "Get Request Logs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/logs?method=POST&limit=100",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "logs"],
+							"query": [
+								{
+									"key": "method",
+									"value": "POST"
+								},
+								{
+									"key": "limit",
+									"value": "100"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Request Log Stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/logs/stats?hours=24",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "logs", "stats"],
+							"query": [
+								{
+									"key": "hours",
+									"value": "24"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Request Log by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/logs/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "logs", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Create Webhook Test",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"webhookUrl\": \"https://webhook.site/your-unique-url\",\n    \"eventType\": \"FT_CALLBACK\",\n    \"payload\": {\n        \"testMode\": true,\n        \"transactionRef\": \"TEST123\",\n        \"amount\": 10000,\n        \"status\": \"SUCCESS\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/features/webhook-test",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "webhook-test"]
+						}
+					}
+				},
+				{
+					"name": "Get Webhook Test History",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/webhook-test?limit=20",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "webhook-test"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Webhook Test Result",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/features/webhook-test/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["features", "webhook-test", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "GIP Callback",
+			"item": [
+				{
+					"name": "Receive GIP Callback",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"sessionId\": \"SESSION123\",\n    \"functionCode\": \"241\",\n    \"actionCode\": \"000\",\n    \"responseCode\": \"000\",\n    \"transactionRef\": \"TXN123456789\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/callback",
+							"host": ["{{baseUrl}}"],
+							"path": ["callback"]
+						},
+						"description": "Internal endpoint for receiving GIP callbacks. Should be protected by IP whitelist in production."
+					}
+				}
+			]
+		}
+	]
+}
