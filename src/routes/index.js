@@ -124,8 +124,13 @@ router.get('/transactions',
 /**
  * Receive GIP callbacks
  * Should be protected by IP whitelist in production
+ * Both paths supported: /callback and /callback/gip
  */
 router.post('/callback',
+    CallbackController.receiveCallback
+);
+
+router.post('/callback/gip',
     CallbackController.receiveCallback
 );
 

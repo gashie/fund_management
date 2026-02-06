@@ -9,21 +9,20 @@ const { callbackLogger } = require('../utils/logger');
 
 /**
  * Receive GIP callback
- * POST /callback
+ * POST /callback or /callback/gip
  */
 exports.receiveCallback = async (req, res, next) => {
-    try {
-        const callback = await CallbackService.saveGipCallback(
-            req.body,
-            req.ip || req.connection.remoteAddress
-        );
+    const body = req.body;
+    const ip = req.ip?.replace('::ffff:', '') || req.connection?.remoteAddress || '-';
 
-        // Log callback received
-        callbackLogger.received(
-            callback.session_id || req.body.sessionId,
-            callback.action_code || req.body.actionCode,
-            callback.function_code || req.body.functionCode
-        );
+    // Log incoming callback with full details
+    callbackLogger.incoming(body, ip);
+
+    try {
+        const callback = await CallbackService.saveGipCallback(body, ip);
+
+        // Log saved
+        callbackLogger.saved(callback.id, callback.transaction_id);
 
         // Return success to GIP immediately
         res.json({
@@ -33,8 +32,7 @@ exports.receiveCallback = async (req, res, next) => {
         });
     } catch (error) {
         // Still return 200 to GIP to acknowledge receipt
-        const { logger } = require('../utils/logger');
-        logger.error('Callback receive error', error);
+        callbackLogger.error('Save failed', error);
         res.json({
             success: false,
             message: 'Callback received with errors',

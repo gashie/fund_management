@@ -180,76 +180,91 @@ const isSuccessCode = (code) => SUCCESS_CODES.includes(code);
 // ============================================================================
 const gipLogger = {
     /**
-     * Log outgoing GIP request
-     * Format: HH:mm:ss ⇒ GIP NEC 300307→300304 sess:ABC123
+     * Log outgoing GIP request with full details
      */
     request: (type, payload) => {
-        const arrow = `${colors.bright}${colors.magenta}⇒${colors.reset}`;
+        const arrow = `${colors.bright}${colors.magenta}⇒⇒${colors.reset}`;
         const banks = payload.originBank && payload.destBank
             ? `${payload.originBank}→${payload.destBank}`
             : '-';
-        const sess = payload.sessionId ? `sess:${truncate(payload.sessionId, 12)}` : '';
-        const amt = payload.amount !== '000000000000' ? formatAmt(payload.amount) : '';
+        const sess = payload.sessionId || '-';
+        const track = payload.trackingNumber || '-';
+        const amt = formatAmt(payload.amount);
+
+        // Header line
+        console.log(
+            `${ts()} ${arrow} ${colors.bgMagenta}${colors.bright} GIP ${type} ${colors.reset} ` +
+            `${colors.cyan}${banks}${colors.reset} ` +
+            (amt !== '-' ? `${colors.yellow}${amt}${colors.reset}` : '')
+        );
+
+        // Details
+        console.log(
+            `${ts()}    ${colors.gray}├─ Session: ${sess} | Track: ${track}${colors.reset}`
+        );
+
+        // Accounts
+        const srcAcc = payload.accountToDebit || '-';
+        const destAcc = payload.accountToCredit || '-';
+        const srcName = payload.nameToDebit || '-';
+        const destName = payload.nameToCredit || '-';
 
         console.log(
-            `${ts()} ${arrow} ${colors.magenta}GIP${colors.reset} ` +
-            `${colors.bright}${type.padEnd(4)}${colors.reset} ` +
-            `${colors.cyan}${banks}${colors.reset} ` +
-            `${colors.gray}${sess}${colors.reset}` +
-            (amt ? ` ${colors.yellow}${amt}${colors.reset}` : '')
+            `${ts()}    ${colors.gray}├─ Debit: ${truncate(srcAcc, 12)} (${truncate(srcName, 15)})${colors.reset}`
+        );
+        console.log(
+            `${ts()}    ${colors.gray}├─ Credit: ${truncate(destAcc, 12)} (${truncate(destName, 15)})${colors.reset}`
+        );
+
+        // Full payload
+        console.log(
+            `${ts()}    ${colors.gray}└─ Payload: ${JSON.stringify(payload)}${colors.reset}`
         );
     },
 
     /**
-     * Log GIP response
-     * Format: HH:mm:ss ⇐ GIP NEC 000 SUCCESS 125ms
-     * For async (001): shows PENDING with approvalCode
-     * For failures: shows reason why
+     * Log GIP response with full details
      */
     response: (type, result, duration) => {
-        const arrow = `${colors.bright}${colors.magenta}⇐${colors.reset}`;
         const code = result.actionCode || result.data?.actionCode || '???';
         const data = result.data || {};
 
-        // Determine status: 000/300/480/385=OK, 001=PENDING (async), others=FAIL
+        // Determine status
         const isSuccess = isSuccessCode(code);
         const isAsync = isAsyncSuccess(code);
         const isFail = !isSuccess && !isAsync;
 
         const codeColor = isFail ? colors.red : (isAsync ? colors.yellow : colors.green);
-        const status = isSuccess ? 'OK' : (isAsync ? 'PENDING' : 'FAIL');
-
-        // Get reason/message for the code
+        const bgColor = isFail ? colors.bgRed : (isAsync ? colors.bgYellow : colors.bgGreen);
+        const status = isSuccess ? 'SUCCESS' : (isAsync ? 'PENDING' : 'FAILED');
         const reason = getActionCodeReason(code);
 
-        // Extra info based on response type
-        let extra = '';
-        if (result.accountName) {
-            // NEC response - show account name
-            extra = ` ${colors.gray}name:${truncate(result.accountName, 15)}${colors.reset}`;
-        } else if (isAsync) {
-            // Async processing - show approvalCode message
-            const approval = data.approvalCode || reason;
-            extra = ` ${colors.yellow}[${truncate(approval, 30)}]${colors.reset}`;
-        } else if (isFail) {
-            // Failure - show reason
-            extra = ` ${colors.red}[${reason}]${colors.reset}`;
-            if (data.approvalCode) extra += ` ${colors.gray}${truncate(data.approvalCode, 30)}${colors.reset}`;
-            if (data.errorMessage) extra += ` ${colors.gray}${truncate(data.errorMessage, 30)}${colors.reset}`;
-        }
-
+        // Header line
         console.log(
-            `${ts()} ${arrow} ${colors.magenta}GIP${colors.reset} ` +
-            `${colors.bright}${type.padEnd(4)}${colors.reset} ` +
-            `${codeColor}${code}${colors.reset} ` +
-            `${codeColor}${status}${colors.reset} ` +
-            `${colors.gray}${duration}ms${colors.reset}` +
-            extra
+            `${ts()} ${colors.bright}${colors.magenta}⇐⇐${colors.reset} ` +
+            `${bgColor}${colors.bright} GIP ${type} ${colors.reset} ` +
+            `${codeColor}${code} ${status}${colors.reset} ` +
+            `${colors.gray}${duration}ms${colors.reset}`
         );
 
-        // For actual failures, log full response on next line for debugging
-        if (isFail && result.data) {
-            console.log(`${ts()}    ${colors.gray}└─ Response: ${JSON.stringify(result.data)}${colors.reset}`);
+        // Reason line
+        const approval = data.approvalCode || '';
+        console.log(
+            `${ts()}    ${colors.gray}├─ Reason: ${reason}${approval ? ` | ${approval}` : ''}${colors.reset}`
+        );
+
+        // NEC specific - account name
+        if (result.accountName) {
+            console.log(
+                `${ts()}    ${colors.gray}├─ Account Name: ${colors.cyan}${result.accountName}${colors.gray}${colors.reset}`
+            );
+        }
+
+        // Full response
+        if (result.data) {
+            console.log(
+                `${ts()}    ${colors.gray}└─ Response: ${JSON.stringify(result.data)}${colors.reset}`
+            );
         }
     },
 
@@ -258,13 +273,13 @@ const gipLogger = {
      */
     error: (type, error, duration) => {
         console.log(
-            `${ts()} ${colors.red}⇐ GIP ${type} ERROR${colors.reset} ` +
+            `${ts()} ${colors.bgRed}${colors.bright} GIP ${type} ERROR ${colors.reset} ` +
             `${colors.red}${error.message || error}${colors.reset} ` +
             `${colors.gray}${duration}ms${colors.reset}`
         );
         // Log full error for debugging
         if (error.response?.data) {
-            console.log(`${ts()}    ${colors.gray}└─ Response: ${JSON.stringify(error.response.data)}${colors.reset}`);
+            console.log(`${ts()}    ${colors.gray}├─ Response: ${JSON.stringify(error.response.data)}${colors.reset}`);
         }
         if (error.code) {
             console.log(`${ts()}    ${colors.gray}└─ Error code: ${error.code}${colors.reset}`);
@@ -311,7 +326,79 @@ const txnLogger = {
 // ============================================================================
 const callbackLogger = {
     /**
-     * Log incoming GIP callback
+     * Log incoming GIP callback with full details
+     */
+    incoming: (payload, ip) => {
+        const code = payload.actionCode || payload.action_code || '???';
+        const fn = payload.functionCode || payload.function_code || '???';
+        const fnName = fn === '241' ? 'FTD' : fn === '240' ? 'FTC' : fn === '242' ? 'REV' : fn;
+        const session = payload.sessionId || payload.session_id || '-';
+        const approval = payload.approvalCode || payload.approval_code || '';
+
+        const isSuccess = code === '000';
+        const codeColor = isSuccess ? colors.green : colors.red;
+        const status = isSuccess ? 'SUCCESS' : 'FAILED';
+        const reason = getActionCodeReason(code);
+
+        console.log(
+            `${ts()} ${colors.bright}${colors.yellow}◀◀${colors.reset} ` +
+            `${colors.bgYellow}${colors.bright} CALLBACK ${colors.reset} ` +
+            `${colors.cyan}${fnName}${colors.reset} ` +
+            `${codeColor}${code} ${status}${colors.reset} ` +
+            `${colors.gray}from ${ip}${colors.reset}`
+        );
+
+        // Second line: session and details
+        console.log(
+            `${ts()}    ${colors.gray}├─ Session: ${session}${colors.reset}`
+        );
+
+        // Third line: reason
+        if (approval || reason !== 'Unknown') {
+            console.log(
+                `${ts()}    ${colors.gray}├─ Reason: ${approval || reason}${colors.reset}`
+            );
+        }
+
+        // Fourth line: accounts and amount
+        const src = payload.accountToDebit || payload.account_to_debit || '-';
+        const dest = payload.accountToCredit || payload.account_to_credit || '-';
+        const srcBank = payload.originBank || payload.origin_bank || '-';
+        const destBank = payload.destBank || payload.dest_bank || '-';
+        const amt = formatAmt(payload.amount);
+
+        console.log(
+            `${ts()}    ${colors.gray}├─ ${srcBank}:${truncate(src, 10)} → ${destBank}:${truncate(dest, 10)} | ${amt}${colors.reset}`
+        );
+
+        // Fifth line: full payload for debugging
+        console.log(
+            `${ts()}    ${colors.gray}└─ Payload: ${JSON.stringify(payload)}${colors.reset}`
+        );
+    },
+
+    /**
+     * Log callback saved
+     */
+    saved: (callbackId, transactionId) => {
+        console.log(
+            `${ts()}    ${colors.green}✓ Saved${colors.reset} ` +
+            `${colors.gray}callback:${callbackId} txn:${transactionId || 'UNMATCHED'}${colors.reset}`
+        );
+    },
+
+    /**
+     * Log callback error
+     */
+    error: (msg, error) => {
+        console.log(
+            `${ts()}    ${colors.red}✗ ${msg}${colors.reset} ` +
+            `${colors.gray}${error?.message || error}${colors.reset}`
+        );
+    },
+
+    /**
+     * Log incoming GIP callback (legacy - for backwards compat)
      */
     received: (sessionId, actionCode, functionCode) => {
         const code = actionCode || '???';
