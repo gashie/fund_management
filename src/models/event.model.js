@@ -56,8 +56,11 @@ const EventModel = {
                 action_code = $4,
                 status = $5,
                 response_received_at = CURRENT_TIMESTAMP
-            WHERE transaction_id = $1 AND event_type = $2
-            ORDER BY created_at DESC LIMIT 1
+            WHERE id = (
+                SELECT id FROM gip_events
+                WHERE transaction_id = $1 AND event_type = $2
+                ORDER BY created_at DESC LIMIT 1
+            )
         `, [transactionId, eventType, JSON.stringify(responsePayload), actionCode, status]);
     },
 
