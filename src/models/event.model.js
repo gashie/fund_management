@@ -26,6 +26,7 @@ const EventModel = {
                 response_payload = COALESCE(EXCLUDED.response_payload, gip_events.response_payload),
                 action_code = COALESCE(EXCLUDED.action_code, gip_events.action_code),
                 status = EXCLUDED.status,
+                duration_ms = COALESCE(EXCLUDED.duration_ms, gip_events.duration_ms),
                 response_received_at = COALESCE(EXCLUDED.response_received_at, gip_events.response_received_at)
             RETURNING *
         `, [
@@ -35,9 +36,9 @@ const EventModel = {
             data.sessionId,
             data.trackingNumber,
             data.functionCode,
-            JSON.stringify(data.requestPayload),
+            data.requestPayload ? JSON.stringify(data.requestPayload) : null,
             data.responsePayload ? JSON.stringify(data.responsePayload) : null,
-            data.actionCode,
+            data.actionCode || null,
             data.status || 'PENDING',
             data.requestSentAt || new Date(),
             data.responseReceivedAt || null,
@@ -47,21 +48,32 @@ const EventModel = {
     },
 
     /**
-     * Update GIP event with response
+     * Update GIP event with response data
+     * @param {Object} data - { transactionId, eventType, requestPayload?, responsePayload, actionCode, status, durationMs? }
      */
-    async updateGipEvent(transactionId, eventType, responsePayload, actionCode, status) {
+    async updateGipEvent(data) {
         await query(`
             UPDATE gip_events
-            SET response_payload = $3,
-                action_code = $4,
-                status = $5,
+            SET request_payload = COALESCE($3, request_payload),
+                response_payload = $4,
+                action_code = $5,
+                status = $6,
+                duration_ms = COALESCE($7, duration_ms),
                 response_received_at = CURRENT_TIMESTAMP
             WHERE id = (
                 SELECT id FROM gip_events
                 WHERE transaction_id = $1 AND event_type = $2
                 ORDER BY created_at DESC LIMIT 1
             )
-        `, [transactionId, eventType, JSON.stringify(responsePayload), actionCode, status]);
+        `, [
+            data.transactionId,
+            data.eventType,
+            data.requestPayload ? JSON.stringify(data.requestPayload) : null,
+            data.responsePayload ? JSON.stringify(data.responsePayload) : null,
+            data.actionCode,
+            data.status,
+            data.durationMs || null
+        ]);
     },
 
     /**

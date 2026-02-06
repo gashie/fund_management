@@ -9,7 +9,7 @@ const CallbackModel = require('../models/callback.model');
 const EventModel = require('../models/event.model');
 const GipService = require('./gip.service');
 const config = require('../config');
-const { txnLogger, logger } = require('../utils/logger');
+const { logger } = require('../utils/logger');
 
 /**
  * Validate transaction request
@@ -106,10 +106,10 @@ const processNameEnquiry = async (transaction) => {
     // Update status
     await TransactionModel.updateStatus(transaction.id, 'NEC_PENDING');
 
-    // Log request
+    // Create initial event record
     await EventModel.logGipEvent({
         transactionId: transaction.id,
-        eventType: 'NEC_REQUEST',
+        eventType: 'NEC',
         eventSequence: 1,
         sessionId: transaction.session_id,
         trackingNumber: transaction.tracking_number,
@@ -127,19 +127,15 @@ const processNameEnquiry = async (transaction) => {
         destAccountNumber: transaction.dest_account_number
     });
 
-    // Log response
-    await EventModel.logGipEvent({
+    // Update event with full request/response data
+    await EventModel.updateGipEvent({
         transactionId: transaction.id,
-        eventType: 'NEC_RESPONSE',
-        eventSequence: 2,
-        sessionId: transaction.session_id,
-        trackingNumber: transaction.tracking_number,
-        functionCode: config.codes.NEC,
+        eventType: 'NEC',
         requestPayload: result.payload,
         responsePayload: result.data,
         actionCode: result.actionCode,
         status: result.actionCode === '000' ? 'SUCCESS' : 'FAILED',
-        responseReceivedAt: new Date()
+        durationMs: result.duration
     });
 
     if (result.actionCode === '000') {
@@ -194,10 +190,10 @@ const initiateFundsTransfer = async (transaction) => {
         status_message: 'FTD request sent, waiting for callback'
     });
 
-    // Log request
+    // Create initial event record
     await EventModel.logGipEvent({
         transactionId: transaction.id,
-        eventType: 'FTD_REQUEST',
+        eventType: 'FTD',
         eventSequence: 3,
         sessionId: transaction.session_id,
         trackingNumber: transaction.tracking_number,
@@ -218,17 +214,26 @@ const initiateFundsTransfer = async (transaction) => {
         amountFormatted: transaction.amount_formatted,
         narration: transaction.narration
     }).then(async (result) => {
-        // Log that request was sent
-        await EventModel.updateGipEvent(
-            transaction.id,
-            'FTD_REQUEST',
-            result.data,
-            result.actionCode,
-            'SENT'
-        );
-    }).catch(err => {
+        // Update event with request/response data
+        await EventModel.updateGipEvent({
+            transactionId: transaction.id,
+            eventType: 'FTD',
+            requestPayload: result.payload,
+            responsePayload: result.data,
+            actionCode: result.actionCode,
+            status: GipService.isAsync(result.actionCode) ? 'PENDING_CALLBACK' :
+                   GipService.isSuccess(result.actionCode) ? 'SUCCESS' : 'FAILED',
+            durationMs: result.duration
+        });
+    }).catch(async (err) => {
         logger.error('FTD request failed', err);
-        txnLogger.status(transaction.id, 'FTD_PENDING', 'FTD_ERROR');
+        await EventModel.updateGipEvent({
+            transactionId: transaction.id,
+            eventType: 'FTD',
+            responsePayload: { error: err.message },
+            actionCode: 'ERR',
+            status: 'ERROR'
+        });
     });
 
     return {
@@ -255,10 +260,10 @@ const processFtc = async (transaction) => {
         status_message: 'FTC request sent, waiting for callback'
     });
 
-    // Log request
+    // Create initial event record
     await EventModel.logGipEvent({
         transactionId: transaction.id,
-        eventType: 'FTC_REQUEST',
+        eventType: 'FTC',
         eventSequence: 5,
         sessionId: ids.sessionId,
         trackingNumber: ids.trackingNumber,
@@ -284,14 +289,17 @@ const processFtc = async (transaction) => {
         ids.trackingNumber
     );
 
-    // Log response
-    await EventModel.updateGipEvent(
-        transaction.id,
-        'FTC_REQUEST',
-        result.data,
-        result.actionCode,
-        'SENT'
-    );
+    // Update event with request/response data
+    await EventModel.updateGipEvent({
+        transactionId: transaction.id,
+        eventType: 'FTC',
+        requestPayload: result.payload,
+        responsePayload: result.data,
+        actionCode: result.actionCode,
+        status: GipService.isAsync(result.actionCode) ? 'PENDING_CALLBACK' :
+               GipService.isSuccess(result.actionCode) ? 'SUCCESS' : 'FAILED',
+        durationMs: result.duration
+    });
 
     return result;
 };
@@ -310,10 +318,10 @@ const processReversal = async (transaction) => {
         ids.trackingNumber
     );
 
-    // Log request
+    // Create initial event record
     await EventModel.logGipEvent({
         transactionId: transaction.id,
-        eventType: 'REVERSAL_REQUEST',
+        eventType: 'REVERSAL',
         eventSequence: 7,
         sessionId: ids.sessionId,
         trackingNumber: ids.trackingNumber,
@@ -337,14 +345,17 @@ const processReversal = async (transaction) => {
         ids.trackingNumber
     );
 
-    // Log response
-    await EventModel.updateGipEvent(
-        transaction.id,
-        'REVERSAL_REQUEST',
-        result.data,
-        result.actionCode,
-        result.actionCode === '000' ? 'SUCCESS' : 'PENDING'
-    );
+    // Update event with request/response data
+    await EventModel.updateGipEvent({
+        transactionId: transaction.id,
+        eventType: 'REVERSAL',
+        requestPayload: result.payload,
+        responsePayload: result.data,
+        actionCode: result.actionCode,
+        status: GipService.isAsync(result.actionCode) ? 'PENDING_CALLBACK' :
+               GipService.isSuccess(result.actionCode) ? 'SUCCESS' : 'FAILED',
+        durationMs: result.duration
+    });
 
     return result;
 };
@@ -364,10 +375,13 @@ const processTsq = async (transaction, type) => {
         narration: transaction.narration
     });
 
-    // Log TSQ event
+    // Determine action based on response
+    const action = GipService.determineTsqAction(result.actionCode, result.statusCode);
+
+    // Log TSQ event with full data
     await EventModel.logGipEvent({
         transactionId: transaction.id,
-        eventType: `${type}_TSQ_RESPONSE`,
+        eventType: `${type}_TSQ`,
         eventSequence: 99,
         sessionId: transaction.session_id,
         trackingNumber: transaction.tracking_number,
@@ -375,12 +389,10 @@ const processTsq = async (transaction, type) => {
         requestPayload: result.payload,
         responsePayload: result.data,
         actionCode: result.actionCode,
-        status: 'RECEIVED',
+        status: action.action,
+        durationMs: result.duration,
         responseReceivedAt: new Date()
     });
-
-    // Determine action
-    const action = GipService.determineTsqAction(result.actionCode, result.statusCode);
 
     return { ...result, ...action };
 };
