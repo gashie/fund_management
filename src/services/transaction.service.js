@@ -109,7 +109,7 @@ const processNameEnquiry = async (transaction) => {
     // Create initial event record
     await EventModel.logGipEvent({
         transactionId: transaction.id,
-        eventType: 'NEC',
+        eventType: 'NEC_REQUEST',
         eventSequence: 1,
         sessionId: transaction.session_id,
         trackingNumber: transaction.tracking_number,
@@ -130,7 +130,7 @@ const processNameEnquiry = async (transaction) => {
     // Update event with full request/response data
     await EventModel.updateGipEvent({
         transactionId: transaction.id,
-        eventType: 'NEC',
+        eventType: 'NEC_REQUEST',
         requestPayload: result.payload,
         responsePayload: result.data,
         actionCode: result.actionCode,
@@ -193,7 +193,7 @@ const initiateFundsTransfer = async (transaction) => {
     // Create initial event record
     await EventModel.logGipEvent({
         transactionId: transaction.id,
-        eventType: 'FTD',
+        eventType: 'FTD_REQUEST',
         eventSequence: 3,
         sessionId: transaction.session_id,
         trackingNumber: transaction.tracking_number,
@@ -217,7 +217,7 @@ const initiateFundsTransfer = async (transaction) => {
         // Update event with request/response data
         await EventModel.updateGipEvent({
             transactionId: transaction.id,
-            eventType: 'FTD',
+            eventType: 'FTD_REQUEST',
             requestPayload: result.payload,
             responsePayload: result.data,
             actionCode: result.actionCode,
@@ -229,7 +229,7 @@ const initiateFundsTransfer = async (transaction) => {
         logger.error('FTD request failed', err);
         await EventModel.updateGipEvent({
             transactionId: transaction.id,
-            eventType: 'FTD',
+            eventType: 'FTD_REQUEST',
             responsePayload: { error: err.message },
             actionCode: 'ERR',
             status: 'ERROR'
@@ -263,7 +263,7 @@ const processFtc = async (transaction) => {
     // Create initial event record
     await EventModel.logGipEvent({
         transactionId: transaction.id,
-        eventType: 'FTC',
+        eventType: 'FTC_REQUEST',
         eventSequence: 5,
         sessionId: ids.sessionId,
         trackingNumber: ids.trackingNumber,
@@ -292,7 +292,7 @@ const processFtc = async (transaction) => {
     // Update event with request/response data
     await EventModel.updateGipEvent({
         transactionId: transaction.id,
-        eventType: 'FTC',
+        eventType: 'FTC_REQUEST',
         requestPayload: result.payload,
         responsePayload: result.data,
         actionCode: result.actionCode,
@@ -321,7 +321,7 @@ const processReversal = async (transaction) => {
     // Create initial event record
     await EventModel.logGipEvent({
         transactionId: transaction.id,
-        eventType: 'REVERSAL',
+        eventType: 'REVERSAL_REQUEST',
         eventSequence: 7,
         sessionId: ids.sessionId,
         trackingNumber: ids.trackingNumber,
@@ -348,7 +348,7 @@ const processReversal = async (transaction) => {
     // Update event with request/response data
     await EventModel.updateGipEvent({
         transactionId: transaction.id,
-        eventType: 'REVERSAL',
+        eventType: 'REVERSAL_REQUEST',
         requestPayload: result.payload,
         responsePayload: result.data,
         actionCode: result.actionCode,
@@ -381,7 +381,7 @@ const processTsq = async (transaction, type) => {
     // Log TSQ event with full data
     await EventModel.logGipEvent({
         transactionId: transaction.id,
-        eventType: `${type}_TSQ`,
+        eventType: `${type}_TSQ_RESPONSE`,
         eventSequence: 99,
         sessionId: transaction.session_id,
         trackingNumber: transaction.tracking_number,
