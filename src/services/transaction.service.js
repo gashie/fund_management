@@ -255,6 +255,9 @@ const processFtc = async (transaction) => {
     // Generate new IDs for FTC
     const ids = await TransactionModel.generateIds();
 
+    // Save FTC session IDs for callback matching
+    await TransactionModel.updateFtcSession(transaction.id, ids.sessionId, ids.trackingNumber);
+
     // Update status
     await TransactionModel.updateStatus(transaction.id, 'FTC_PENDING', {
         status_message: 'FTC request sent, waiting for callback'

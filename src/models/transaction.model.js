@@ -91,14 +91,27 @@ const TransactionModel = {
     },
 
     /**
-     * Find transaction by session ID
+     * Find transaction by session ID (checks FTD, FTC, and Reversal sessions)
      */
     async findBySessionId(sessionId) {
-        const result = await query(
-            'SELECT * FROM transactions WHERE session_id = $1',
-            [sessionId]
-        );
+        const result = await query(`
+            SELECT * FROM transactions
+            WHERE session_id = $1
+               OR ftc_session_id = $1
+               OR reversal_session_id = $1
+        `, [sessionId]);
         return result.rows[0] || null;
+    },
+
+    /**
+     * Update FTC session info
+     */
+    async updateFtcSession(id, sessionId, trackingNumber) {
+        await query(`
+            UPDATE transactions
+            SET ftc_session_id = $2, ftc_tracking_number = $3
+            WHERE id = $1
+        `, [id, sessionId, trackingNumber]);
     },
 
     /**
