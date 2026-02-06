@@ -9,6 +9,7 @@ const CallbackModel = require('../models/callback.model');
 const EventModel = require('../models/event.model');
 const GipService = require('./gip.service');
 const config = require('../config');
+const { txnLogger, logger } = require('../utils/logger');
 
 /**
  * Validate transaction request
@@ -226,7 +227,8 @@ const initiateFundsTransfer = async (transaction) => {
             'SENT'
         );
     }).catch(err => {
-        console.error('FTD request error:', err);
+        logger.error('FTD request failed', err);
+        txnLogger.status(transaction.id, 'FTD_PENDING', 'FTD_ERROR');
     });
 
     return {

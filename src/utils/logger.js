@@ -154,6 +154,41 @@ const httpLogger = {
 };
 
 // ============================================================================
+// GIP Action Code Mappings (GhIPSS)
+// ============================================================================
+const GIP_ACTION_CODES = {
+    '000': 'Success',
+    '001': 'Invalid/Missing field',
+    '003': 'Invalid amount',
+    '005': 'Do not honor',
+    '012': 'Invalid transaction',
+    '013': 'Invalid amount',
+    '014': 'Invalid account number',
+    '030': 'Format error',
+    '051': 'Insufficient funds',
+    '054': 'Expired card',
+    '055': 'Incorrect PIN',
+    '056': 'No card record',
+    '057': 'Transaction not permitted',
+    '058': 'Terminal not permitted',
+    '061': 'Exceeds limit',
+    '065': 'Exceeds frequency limit',
+    '068': 'Timeout - late response',
+    '075': 'PIN tries exceeded',
+    '091': 'Issuer unavailable',
+    '092': 'Destination not found',
+    '094': 'Duplicate transaction',
+    '096': 'System malfunction',
+    '381': 'Not at receiving institution',
+    '909': 'System error',
+    '912': 'Issuer unavailable',
+    '990': 'Being processed',
+    '999': 'Validation error'
+};
+
+const getActionCodeReason = (code) => GIP_ACTION_CODES[code] || 'Unknown error';
+
+// ============================================================================
 // External API Call Logger (GIP)
 // ============================================================================
 const gipLogger = {
@@ -181,13 +216,30 @@ const gipLogger = {
     /**
      * Log GIP response
      * Format: HH:mm:ss ⇐ GIP NEC 000 SUCCESS 125ms
+     * For failures: shows reason why
      */
     response: (type, result, duration) => {
         const arrow = `${colors.bright}${colors.magenta}⇐${colors.reset}`;
         const code = result.actionCode || result.data?.actionCode || '???';
         const codeColor = code === '000' ? colors.green : colors.red;
         const status = code === '000' ? 'OK' : 'FAIL';
-        const extra = result.accountName ? ` ${colors.gray}name:${truncate(result.accountName, 15)}${colors.reset}` : '';
+
+        // Get reason for the code
+        const reason = getActionCodeReason(code);
+
+        // Extra info based on response type
+        let extra = '';
+        if (result.accountName) {
+            extra = ` ${colors.gray}name:${truncate(result.accountName, 15)}${colors.reset}`;
+        } else if (code !== '000') {
+            // Show reason for failures
+            extra = ` ${colors.red}[${reason}]${colors.reset}`;
+            // Show additional details from GIP response if available
+            const data = result.data || {};
+            if (data.statusCode) extra += ` ${colors.gray}status:${data.statusCode}${colors.reset}`;
+            if (data.errorMessage) extra += ` ${colors.gray}${truncate(data.errorMessage, 30)}${colors.reset}`;
+            if (data.message) extra += ` ${colors.gray}${truncate(data.message, 30)}${colors.reset}`;
+        }
 
         console.log(
             `${ts()} ${arrow} ${colors.magenta}GIP${colors.reset} ` +
@@ -197,10 +249,15 @@ const gipLogger = {
             `${colors.gray}${duration}ms${colors.reset}` +
             extra
         );
+
+        // For failures, log full response on next line for debugging
+        if (code !== '000' && result.data) {
+            console.log(`${ts()}    ${colors.gray}└─ Response: ${JSON.stringify(result.data)}${colors.reset}`);
+        }
     },
 
     /**
-     * Log GIP error
+     * Log GIP error (network/timeout errors)
      */
     error: (type, error, duration) => {
         console.log(
@@ -208,6 +265,13 @@ const gipLogger = {
             `${colors.red}${error.message || error}${colors.reset} ` +
             `${colors.gray}${duration}ms${colors.reset}`
         );
+        // Log full error for debugging
+        if (error.response?.data) {
+            console.log(`${ts()}    ${colors.gray}└─ Response: ${JSON.stringify(error.response.data)}${colors.reset}`);
+        }
+        if (error.code) {
+            console.log(`${ts()}    ${colors.gray}└─ Error code: ${error.code}${colors.reset}`);
+        }
     }
 };
 
@@ -321,5 +385,8 @@ module.exports = {
     truncate,
     formatAmt,
     statusColor,
-    methodColor
+    methodColor,
+    // GIP codes
+    GIP_ACTION_CODES,
+    getActionCodeReason
 };
