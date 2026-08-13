@@ -1,4 +1,6 @@
 node_modules
 .claude/
-**/.env
-**/.env.*
+# Ignore any file ending with .env
+*.env
+# Ignore any file named config.env in any folder
+**/config.env

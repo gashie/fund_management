@@ -3,14 +3,32 @@
  * All features can be enabled/disabled via environment variables
  */
 
-require('dotenv').config({ path: './config.env' });
+/**
+ * Application Configuration
+ * All features can be enabled/disabled via environment variables
+
+ *
+ * Point somewhere else with ENV_FILE=/path/to/file
+ */
+
+const path = require('path');
+const fs = require('fs');
+
+const ENV_FILE = process.env.ENV_FILE
+    ? path.resolve(process.env.ENV_FILE)
+    : path.resolve(__dirname, '../../config/config.env');
+
+const envLoaded = fs.existsSync(ENV_FILE);
+if (envLoaded) {
+    require('dotenv').config({ path: ENV_FILE });
+}
 
 const parseBoolean = (value, defaultValue = false) => {
     if (value === undefined || value === null) return defaultValue;
     return value === 'true' || value === '1' || value === true;
 };
 
-module.exports = {
+ const config = {
     // Server
     port: process.env.PORT || 3002,
     nodeEnv: process.env.NODE_ENV || 'development',
@@ -35,6 +53,9 @@ module.exports = {
         ftcUrl: process.env.GIP_FTC_URL || 'http://172.21.8.21:9000/SwitchGIP/WSGIP',
         tsqUrl: process.env.GIP_TSQ_URL || 'http://172.21.8.21:9000/SwitchGIP/WSGIP',
         callbackUrl: process.env.GIP_CALLBACK_URL || 'http://localhost:3002/api/callback/gip',
+                // Only these addresses may post callbacks. Empty means anyone can.
+        callbackAllowedIps: (process.env.GTECH_CALLBACK_IPS || '')
+            .split(',').map(s => s.trim()).filter(Boolean),
         timeout: parseInt(process.env.GIP_TIMEOUT || '30000')
     },
 
@@ -56,6 +77,7 @@ module.exports = {
 
     // Callback Configuration
     callback: {
+        
         maxRetries: parseInt(process.env.CALLBACK_MAX_RETRIES || '5'),
         initialDelaySeconds: parseInt(process.env.CALLBACK_INITIAL_DELAY || '5'),
         backoffMultiplier: parseFloat(process.env.CALLBACK_BACKOFF_MULTIPLIER || '2'),
@@ -278,3 +300,8 @@ module.exports = {
         ]
     }
 };
+
+const { checkConfig } = require('./check');
+checkConfig(config, ENV_FILE, envLoaded);
+
+module.exports = config;
