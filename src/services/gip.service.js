@@ -331,30 +331,46 @@ const transactionStatusQuery = async (txn) => {
     }
 };
 
+
 /**
- * Determine TSQ action based on GhIPSS rules
+ * Determine what a TSQ response means for the original transaction.
  */
 const determineTsqAction = (actionCode, statusCode) => {
-    if (actionCode === '000' && statusCode === '000') {
-        return { action: 'SUCCESS', message: 'Transaction successful' };
+    // ActCode 381 / 999 / 990 are faults in our own request - the transaction is untouched.
+    // Retry with corrected values; never mark the transaction failed on these.
+    if (actionCode !== '000') {
+        const reasons = {
+            '381': 'Mismatched values vs the original transaction, or a previous-day transaction',
+            '999': 'Field validation error in the TSQ request',
+            '990': 'GTECH error processing the TSQ request'
+        };
+        return {
+            action: 'REQUEST_ERROR',
+            message: reasons[actionCode] || `Unrecognised TSQ ActCode: ${actionCode}`,
+            retryMinutes: 5
+        };
     }
-    if (actionCode === '000' && statusCode === '990') {
-        return { action: 'RETRY', message: 'Being processed', retryMinutes: 5 };
+
+    // ActCode 000 without a StatusQuery gives us no outcome to act on.
+    if (!statusCode) {
+        return { action: 'REQUEST_ERROR', message: 'ActCode 000 with no StatusQuery', retryMinutes: 5 };
     }
-    if (actionCode === '000' && statusCode === '381') {
-        return { action: 'FAIL', message: 'Not at receiving institution' };
+
+    if (isSuccess(statusCode)) {
+        return { action: 'SUCCESS', message: getActionMessage(statusCode) };
     }
-    if (actionCode === '381' && !statusCode) {
-        return { action: 'MANUAL', message: 'Mismatched values' };
+    if (statusCode === '990' || isRetryable(statusCode)) {
+        return { action: 'RETRY', message: 'Being processed by receiving institution', retryMinutes: 5 };
     }
-    if (actionCode === '999' && !statusCode) {
-        return { action: 'FAIL', message: 'Validation error' };
+    if (isFatal(statusCode)) {
+        return { action: 'FAIL', message: getActionMessage(statusCode) };
     }
-    if (actionCode === '990' && !statusCode) {
-        return { action: 'RETRY', message: 'Exception', retryMinutes: 5 };
-    }
-    return { action: 'UNKNOWN', message: 'Unknown response' };
+
+    // Unknown status code - retry rather than guess. Exhaustion parks it for a human.
+    return { action: 'RETRY', message: `Unknown StatusQuery: ${statusCode}`, retryMinutes: 5 };
 };
+
+
 
 /**
  * Check if action code needs TSQ

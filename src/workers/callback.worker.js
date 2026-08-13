@@ -1,6 +1,6 @@
 /**
  * Callback Worker
- * Processes incoming GIP callbacks - Functional style
+ * Processes incoming  callbacks - Functional style
  */
 
 const CallbackModel = require('../models/callback.model');
@@ -15,29 +15,33 @@ let logger = console;
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const processCallback = async (callback) => {
-    const transaction = await TransactionModel.findBySessionId(callback.session_id);
+    // Match on session id, which also tells us which leg it belongs to.
+    const transaction = await TransactionModel.findBySessionIdWithLeg(callback.session_id);
 
     if (!transaction) {
         await CallbackModel.updateGipCallbackStatus(callback.id, 'IGNORED', 'No matching transaction');
         return;
     }
 
-    logger.info(`Processing callback: ${callback.function_code}, Action: ${callback.action_code}`);
+    // Route by the leg whose session matched, NOT by the echoed function code.
+    // Reversals are sent as 241, so function-code routing mistakes them for FTD.
+    const leg = transaction.matched_leg;
+    logger.info(`Processing callback: leg=${leg}, fn=${callback.function_code}, action=${callback.action_code}`);
 
     try {
         let result;
-        switch (callback.function_code) {
-            case '241':  // FTD
+        switch (leg) {
+            case 'FTD':
                 result = await CallbackService.processFtdCallback(callback, transaction);
                 break;
-            case '240':  // FTC
+            case 'FTC':
                 result = await CallbackService.processFtcCallback(callback, transaction);
                 break;
-            case '242':  // Reversal
+            case 'REVERSAL':
                 result = await CallbackService.processReversalCallback(callback, transaction);
                 break;
             default:
-                await CallbackModel.updateGipCallbackStatus(callback.id, 'IGNORED', `Unknown function: ${callback.function_code}`);
+                await CallbackModel.updateGipCallbackStatus(callback.id, 'IGNORED', `Unresolved leg for session ${callback.session_id}`);
                 return;
         }
 

@@ -138,13 +138,12 @@ const processFtcCallback = async (callback, transaction) => {
         await TransactionModel.updateStatus(transaction.id, 'FTC_SUCCESS', {
             ftc_action_code: actionCode
         });
-        await TransactionModel.updateStatus(transaction.id, 'COMPLETED', {
+        const completed = await TransactionModel.updateStatus(transaction.id, 'COMPLETED', {
             status_message: 'Transaction completed successfully'
         });
         await CallbackModel.updateGipCallbackStatus(callback.id, 'PROCESSED');
 
-        // Queue success callback
-        await queueClientCallback(transaction, 'SUCCESS', 'Transaction completed');
+        await queueClientCallback(completed || transaction, 'SUCCESS', 'Transaction completed');
 
         return { action: 'COMPLETED' };
 
@@ -158,17 +157,31 @@ const processFtcCallback = async (callback, transaction) => {
         return { action: 'SCHEDULE_TSQ' };
 
     } else {
-        // FTC Failed - MUST REVERSE!
+        // FTC failed after a successful FTD - the customer is debited and not credited.
+        // Auto-reversal is disabled, so park for an operator and tell the client immediately.
         await TransactionModel.updateStatus(transaction.id, 'FTC_FAILED', {
             ftc_action_code: actionCode,
-            status_message: `FTC failed: ${actionCode} - reversal required`
+            status_message: `FTC failed: ${actionCode} - manual reversal required`
         });
-        await TransactionModel.markForReversal(transaction.id);
+        const parked = await TransactionModel.updateStatus(transaction.id, 'MANUAL_REVERSAL_REQUIRED', {
+            status_message: `FTC failed: ${actionCode} - awaiting manual reversal`
+        });
         await CallbackModel.updateGipCallbackStatus(callback.id, 'PROCESSED');
 
-        return { action: 'REVERSAL_REQUIRED' };
+        await EventModel.createAuditLog({
+            entityType: 'transaction',
+            entityId: transaction.id,
+            action: 'MANUAL_REVERSAL_REQUIRED',
+            details: { actionCode, reason: 'FTC failed' },
+            triggeredBy: 'callback_processor'
+        });
+
+        await queueClientCallback(parked || transaction, 'FAILED', 'Transaction failed - funds return pending');
+
+        return { action: 'MANUAL_REVERSAL_REQUIRED' };
     }
 };
+
 
 /**
  * Process Reversal callback
@@ -183,7 +196,7 @@ const processReversalCallback = async (callback, transaction) => {
         eventSequence: 6,
         sessionId: callback.session_id,
         trackingNumber: callback.tracking_number,
-        functionCode: '242',
+        functionCode: callback.function_code,
         responsePayload: callback.raw_payload,
         actionCode: actionCode,
         status: actionCode === '000' ? 'SUCCESS' : 'RECEIVED',
@@ -195,25 +208,23 @@ const processReversalCallback = async (callback, transaction) => {
         await TransactionModel.updateStatus(transaction.id, 'REVERSAL_SUCCESS', {
             reversal_action_code: actionCode
         });
-        await TransactionModel.updateStatus(transaction.id, 'FAILED', {
+        const reversed = await TransactionModel.updateStatus(transaction.id, 'FAILED', {
             status_message: 'Transaction failed - funds returned via reversal'
         });
         await CallbackModel.updateGipCallbackStatus(callback.id, 'PROCESSED');
 
-        // Queue failure callback (with reversal info)
-        await queueClientCallback(transaction, 'FAILED', 'Transaction failed - funds reversed');
+        await queueClientCallback(reversed || transaction, 'FAILED', 'Transaction failed - funds reversed');
 
         return { action: 'REVERSAL_SUCCESS' };
 
     } else {
         // Reversal Failed - CRITICAL
-        await TransactionModel.updateStatus(transaction.id, 'REVERSAL_FAILED', {
+        const failed = await TransactionModel.updateStatus(transaction.id, 'REVERSAL_FAILED', {
             reversal_action_code: actionCode,
             status_message: 'CRITICAL: Reversal failed - manual intervention required'
         });
         await CallbackModel.updateGipCallbackStatus(callback.id, 'PROCESSED');
 
-        // Create critical alert
         await EventModel.createAuditLog({
             entityType: 'transaction',
             entityId: transaction.id,
@@ -222,9 +233,13 @@ const processReversalCallback = async (callback, transaction) => {
             triggeredBy: 'callback_processor'
         });
 
+        // The client must never be left waiting on a callback that never comes.
+        await queueClientCallback(failed || transaction, 'FAILED', 'Transaction failed - funds return pending');
+
         return { action: 'REVERSAL_FAILED_CRITICAL' };
     }
 };
+
 
 /**
  * Queue client callback

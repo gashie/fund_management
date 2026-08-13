@@ -344,7 +344,85 @@ const TransactionModel = {
             FOR UPDATE SKIP LOCKED
         `, [limit]);
         return result.rows;
-    }
+    },
+
+    /**
+     * Atomically claim rows in `fromStatus` and move them to `toStatus`.
+     * The status flip commits with the lock held, so two workers can never claim the same row.
+     */
+    async claimByStatus(fromStatus, toStatus, limit = 5) {
+        return transaction(async (client) => {
+            const picked = await client.query(`
+                    SELECT id FROM transactions
+                    WHERE status = $1
+                    ORDER BY updated_at ASC
+                    LIMIT $2
+                    FOR UPDATE SKIP LOCKED
+                `, [fromStatus, limit]);
+
+            if (picked.rows.length === 0) return [];
+
+            const ids = picked.rows.map(r => r.id);
+            const claimed = await client.query(`
+                    UPDATE transactions
+                    SET status = $2, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ANY($1::uuid[])
+                    RETURNING *
+                `, [ids, toStatus]);
+
+            return claimed.rows;
+        });
+    },
+
+    /**
+     * Claim TSQ-due rows by pushing their next-attempt time forward (a lease).
+     * If this worker dies mid-query the lease expires and the row is picked up again.
+     */
+    async claimTsqDue(limit = 5, leaseMinutes = 5) {
+        return transaction(async (client) => {
+            const picked = await client.query(`
+                    SELECT id FROM transactions
+                    WHERE tsq_required = true
+                      AND tsq_next_attempt_at <= CURRENT_TIMESTAMP
+                      AND status NOT IN ('COMPLETED', 'FAILED', 'TIMEOUT', 'NEEDS_MANUAL_REVIEW')
+                    ORDER BY tsq_next_attempt_at ASC
+                    LIMIT $1
+                    FOR UPDATE SKIP LOCKED
+                `, [limit]);
+
+            if (picked.rows.length === 0) return [];
+
+            const ids = picked.rows.map(r => r.id);
+            const leased = await client.query(`
+                    UPDATE transactions
+                    SET tsq_next_attempt_at = CURRENT_TIMESTAMP + ($2 || ' minutes')::interval
+                    WHERE id = ANY($1::uuid[])
+                    RETURNING *
+                `, [ids, String(leaseMinutes)]);
+
+            return leased.rows;
+        });
+    },
+
+    /**
+     * Find a transaction by any of its three session ids and report which leg matched.
+     * Routing callbacks by matched leg is reliable; routing by echoed function code is not.
+     */
+    async findBySessionIdWithLeg(sessionId) {
+        const result = await query(`
+                SELECT *,
+                       CASE
+                           WHEN session_id = $1          THEN 'FTD'
+                           WHEN ftc_session_id = $1      THEN 'FTC'
+                           WHEN reversal_session_id = $1 THEN 'REVERSAL'
+                       END AS matched_leg
+                FROM transactions
+                WHERE session_id = $1 OR ftc_session_id = $1 OR reversal_session_id = $1
+                LIMIT 1
+            `, [sessionId]);
+        return result.rows[0] || null;
+    },
 };
+
 
 module.exports = TransactionModel;

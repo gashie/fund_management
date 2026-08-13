@@ -1,6 +1,7 @@
 /**
  * Worker Manager
  * Orchestrates all background workers - Functional style
+
  */
 
 const callbackWorker = require('./callback.worker');
@@ -18,7 +19,7 @@ const queueWorker = require('./queue.worker');
 const monitoringWorker = require('./monitoring.worker');
 const cleanupWorker = require('./cleanup.worker');
 
-// Colorful logger
+const config = require('../config');
 const { workerLogger, system } = require('../utils/logger');
 
 let isRunning = false;
@@ -28,7 +29,6 @@ const workers = {
     callback: callbackWorker,
     ftc: ftcWorker,
     tsq: tsqWorker,
-    reversal: reversalWorker,
     clientCallback: clientCallbackWorker,
     timeout: timeoutWorker,
 
@@ -41,11 +41,21 @@ const workers = {
     cleanup: cleanupWorker
 };
 
+// Reversals are handled manually for now. The worker stays wired but off by default,
+// because it re-fires every 5s while a reversal is still in flight.
+if (config.features.autoReversal) {
+    workers.reversal = reversalWorker;
+}
+
 const start = () => {
     if (isRunning) return;
 
     isRunning = true;
     system.info('Starting workers...');
+
+    if (!config.features.autoReversal) {
+        system.warn('Auto-reversal DISABLED - FTC failures park as MANUAL_REVERSAL_REQUIRED');
+    }
 
     Object.entries(workers).forEach(([name, worker]) => {
         const logger = workerLogger(name.toUpperCase());
@@ -85,6 +95,7 @@ const setupGracefulShutdown = () => {
 
 const getStatus = () => ({
     isRunning,
+    autoReversal: config.features.autoReversal,
     workers: Object.entries(workers).reduce((acc, [name, worker]) => {
         acc[name] = worker.getStatus();
         return acc;

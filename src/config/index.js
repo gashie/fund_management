@@ -89,6 +89,7 @@ module.exports = {
         rateLimitTiers: parseBoolean(process.env.FEATURE_RATE_LIMIT_TIERS, false),
 
         // Operational Features (enabled by default)
+        autoReversal: parseBoolean(process.env.FEATURE_AUTO_REVERSAL, false),
         bulkTransactions: parseBoolean(process.env.FEATURE_BULK_TRANSACTIONS, true),
         scheduledTransfers: parseBoolean(process.env.FEATURE_SCHEDULED_TRANSFERS, true),
         recurringPayments: parseBoolean(process.env.FEATURE_RECURRING_PAYMENTS, true),

@@ -448,7 +448,8 @@ const manualReversal = async (transactionId, triggeredBy, reason) => {
     }
 
     // Check if reversal is valid for this status
-    const allowedStatuses = ['FTD_SUCCESS', 'FTC_FAILED', 'FTC_PENDING', 'FTC_TSQ'];
+    const allowedStatuses = ['FTD_SUCCESS', 'FTC_FAILED', 'FTC_PENDING', 'FTC_TSQ',
+                         'MANUAL_REVERSAL_REQUIRED', 'NEEDS_MANUAL_REVIEW'];
     if (!allowedStatuses.includes(transaction.status)) {
         throw {
             status: 400,
