@@ -422,6 +422,35 @@ const TransactionModel = {
             `, [sessionId]);
         return result.rows[0] || null;
     },
+        /**
+     * Save the date and time we sent on one leg, so a later TSQ can repeat it.
+     * leg is 'FTD', 'FTC' or 'REVERSAL'.
+     */
+    async saveLegDateTime(id, leg, dateTime) {
+        const columns = {
+            FTD: 'ftd_date_time',
+            FTC: 'ftc_date_time',
+            REVERSAL: 'reversal_date_time'
+        };
+        const column = columns[leg];
+        if (!column || !dateTime) return;
+
+        await query(`UPDATE transactions SET ${column} = $2 WHERE id = $1`, [id, dateTime]);
+    },
+
+    /**
+     * Count one more FTC attempt and give back the new total.
+     * Used to stop a failing FTC from retrying forever.
+     */
+    async countFtcAttempt(id) {
+        const result = await query(`
+            UPDATE transactions
+            SET ftc_attempts = COALESCE(ftc_attempts, 0) + 1
+            WHERE id = $1
+            RETURNING ftc_attempts
+        `, [id]);
+        return result.rows[0]?.ftc_attempts || 0;
+    },
 };
 
 

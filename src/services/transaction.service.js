@@ -181,16 +181,14 @@ const processNameEnquiry = async (transaction) => {
 };
 
 /**
- * Initiate Funds Transfer (FTD)
- * Asynchronous - sends request and returns immediately
+ * Send the FTD. Takes the money from the customer.
+ * Returns straight away. The result arrives later as a callback.
  */
 const initiateFundsTransfer = async (transaction) => {
-    // Update status
     await TransactionModel.updateStatus(transaction.id, 'FTD_PENDING', {
         status_message: 'FTD request sent, waiting for callback'
     });
 
-    // Create initial event record
     await EventModel.logGipEvent({
         transactionId: transaction.id,
         eventType: 'FTD_REQUEST',
@@ -201,7 +199,6 @@ const initiateFundsTransfer = async (transaction) => {
         status: 'PENDING'
     });
 
-    // Call GIP (async - don't wait for callback)
     GipService.fundsTransferDebit({
         sessionId: transaction.session_id,
         trackingNumber: transaction.tracking_number,
@@ -214,7 +211,9 @@ const initiateFundsTransfer = async (transaction) => {
         amountFormatted: transaction.amount_formatted,
         narration: transaction.narration
     }).then(async (result) => {
-        // Update event with request/response data
+        // Save the date and time we sent, so TSQ can send the same value later.
+        await TransactionModel.saveLegDateTime(transaction.id, 'FTD', result.payload.dateTime);
+
         await EventModel.updateGipEvent({
             transactionId: transaction.id,
             eventType: 'FTD_REQUEST',
@@ -249,21 +248,18 @@ const initiateFundsTransfer = async (transaction) => {
 };
 
 /**
- * Process FTC (called by worker after FTD success)
+ * Send the FTC. Gives the money to the requesting bank.
+ * Uses a brand new session and tracking number so the callback can be told apart from the FTD.
  */
 const processFtc = async (transaction) => {
-    // Generate new IDs for FTC
     const ids = await TransactionModel.generateIds();
 
-    // Save FTC session IDs for callback matching
     await TransactionModel.updateFtcSession(transaction.id, ids.sessionId, ids.trackingNumber);
 
-    // Update status
     await TransactionModel.updateStatus(transaction.id, 'FTC_PENDING', {
         status_message: 'FTC request sent, waiting for callback'
     });
 
-    // Create initial event record
     await EventModel.logGipEvent({
         transactionId: transaction.id,
         eventType: 'FTC_REQUEST',
@@ -274,11 +270,8 @@ const processFtc = async (transaction) => {
         status: 'PENDING'
     });
 
-    // Call GIP
     const result = await GipService.fundsTransferCredit(
         {
-            sessionId: transaction.session_id,
-            trackingNumber: transaction.tracking_number,
             srcBankCode: transaction.src_bank_code,
             destBankCode: transaction.dest_bank_code,
             srcAccountNumber: transaction.src_account_number,
@@ -292,7 +285,9 @@ const processFtc = async (transaction) => {
         ids.trackingNumber
     );
 
-    // Update event with request/response data
+    // Save the date and time we sent, so a TSQ on the FTC leg can repeat it.
+    await TransactionModel.saveLegDateTime(transaction.id, 'FTC', result.payload.dateTime);
+
     await EventModel.updateGipEvent({
         transactionId: transaction.id,
         eventType: 'FTC_REQUEST',
@@ -308,20 +303,18 @@ const processFtc = async (transaction) => {
 };
 
 /**
- * Process Reversal (called by worker when FTC fails)
+ * Send a reversal. Puts the money back.
+ * Only runs when an operator asks for it. The automatic version is switched off.
  */
 const processReversal = async (transaction) => {
-    // Generate new IDs for reversal
     const ids = await TransactionModel.generateIds();
 
-    // Update reversal info
     await TransactionModel.updateReversalInfo(
         transaction.id,
         ids.sessionId,
         ids.trackingNumber
     );
 
-    // Create initial event record
     await EventModel.logGipEvent({
         transactionId: transaction.id,
         eventType: 'REVERSAL_REQUEST',
@@ -332,7 +325,6 @@ const processReversal = async (transaction) => {
         status: 'PENDING'
     });
 
-    // Call GIP
     const result = await GipService.reversal(
         {
             srcBankCode: transaction.src_bank_code,
@@ -348,7 +340,8 @@ const processReversal = async (transaction) => {
         ids.trackingNumber
     );
 
-    // Update event with request/response data
+    await TransactionModel.saveLegDateTime(transaction.id, 'REVERSAL', result.payload.dateTime);
+
     await EventModel.updateGipEvent({
         transactionId: transaction.id,
         eventType: 'REVERSAL_REQUEST',
@@ -364,30 +357,41 @@ const processReversal = async (transaction) => {
 };
 
 /**
- * Process TSQ (called by worker)
+ * Ask GTECH what happened to one leg.
+ * Sends back that leg's own session, tracking number, banks and date/time.
  */
 const processTsq = async (transaction, type) => {
     const result = await GipService.transactionStatusQuery({
-        sessionId: transaction.session_id,
-        trackingNumber: transaction.tracking_number,
         srcBankCode: transaction.src_bank_code,
         destBankCode: transaction.dest_bank_code,
         srcAccountNumber: transaction.src_account_number,
         destAccountNumber: transaction.dest_account_number,
+        srcAccountName: transaction.src_account_name,
+        destAccountName: transaction.dest_account_name,
         amountFormatted: transaction.amount_formatted,
-        narration: transaction.narration
-    });
+        narration: transaction.narration,
 
-    // Determine action based on response
+        sessionId: transaction.session_id,
+        trackingNumber: transaction.tracking_number,
+        ftdDateTime: transaction.ftd_date_time,
+
+        ftcSessionId: transaction.ftc_session_id,
+        ftcTrackingNumber: transaction.ftc_tracking_number,
+        ftcDateTime: transaction.ftc_date_time,
+
+        reversalSessionId: transaction.reversal_session_id,
+        reversalTrackingNumber: transaction.reversal_tracking_number,
+        reversalDateTime: transaction.reversal_date_time
+    }, type);
+
     const action = GipService.determineTsqAction(result.actionCode, result.statusCode);
 
-    // Log TSQ event with full data
     await EventModel.logGipEvent({
         transactionId: transaction.id,
         eventType: `${type}_TSQ_RESPONSE`,
         eventSequence: 99,
-        sessionId: transaction.session_id,
-        trackingNumber: transaction.tracking_number,
+        sessionId: result.payload.sessionId,
+        trackingNumber: result.payload.trackingNumber,
         functionCode: config.codes.TSQ,
         requestPayload: result.payload,
         responsePayload: result.data,
@@ -399,6 +403,7 @@ const processTsq = async (transaction, type) => {
 
     return { ...result, ...action };
 };
+
 
 /**
  * Manual FTC - Admin can trigger FTC for FTD_SUCCESS transactions

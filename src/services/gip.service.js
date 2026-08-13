@@ -1,64 +1,46 @@
 /**
  * GIP Service
- * External API calls to GIP - Functional style
- * Central source for GIP action codes and response handling
+ * Sends messages to external api and reads the replies.
+ *
+ * REPLACES src/services/gip.service.js in full.
+ * The message building moved to payload.builder.js so it can be tested.
  */
 
 const axios = require('axios');
 const config = require('../config');
 const { gipLogger } = require('../utils/logger');
 const { actCode } = require('../../config/actcodes');
+const Payload = require('./payload.builder');
 
 // ============================================================================
-// GIP ACTION CODES (from config/actcodes.js)
+// EXTERNAL API ACTION CODES (from config/actcodes.js)
 // ============================================================================
 
-// Build lookup map: code -> message
 const ACTION_CODES = actCode.reduce((map, item) => {
     map[item.code] = item.message;
     return map;
 }, {});
 
-// Success codes - transaction completed successfully
+// The leg worked.
 const SUCCESS_CODES = ['000', '300', '480', '385'];
 
-// Async codes - request accepted, callback will follow
+// Accepted. A callback will follow.
 const ASYNC_CODES = ['001'];
 
-// Retry codes - temporary failure, try again
+// Temporary problem. Try again or use TSQ.
 const RETRY_CODES = ['909', '912', '990', '911', '091'];
 
-// Fatal failure codes - do not retry
+// Do not try again.
 const FATAL_CODES = ['114', '116', '999', '100', '125', '381'];
 
-/**
- * Get human-readable message for action code
- */
 const getActionMessage = (code) => ACTION_CODES[code] || 'Unknown';
-
-/**
- * Check if action code indicates success
- */
 const isSuccess = (code) => SUCCESS_CODES.includes(code);
-
-/**
- * Check if action code indicates async processing (callback coming)
- */
 const isAsync = (code) => ASYNC_CODES.includes(code);
-
-/**
- * Check if action code indicates a retryable error
- */
 const isRetryable = (code) => RETRY_CODES.includes(code);
-
-/**
- * Check if action code indicates fatal failure (no retry)
- */
 const isFatal = (code) => FATAL_CODES.includes(code);
 
 /**
- * Analyze GIP response and determine action
- * Returns: { status, message, shouldRetry, isFinal }
+ * Work out what a reply means.
  */
 const analyzeResponse = (actionCode, approvalCode = null) => {
     const message = approvalCode || getActionMessage(actionCode);
@@ -75,7 +57,7 @@ const analyzeResponse = (actionCode, approvalCode = null) => {
     if (isFatal(actionCode)) {
         return { status: 'FAILED', message, shouldRetry: false, isFinal: true };
     }
-    // Unknown code - treat as retryable
+    // We do not know this code. Treat it as worth retrying rather than guessing.
     return { status: 'UNKNOWN', message, shouldRetry: true, isFinal: false };
 };
 
@@ -84,32 +66,12 @@ const client = axios.create({
     headers: { 'Content-Type': 'application/json' }
 });
 
-/**
- * Format amount for GIP (12-digit padded)
- * Example: 1000.50 → "000000100050"
- */
-const formatAmount = (amount) => {
-    if (!amount || amount === 0) return '000000000000';
-    const cents = Math.round(amount * 100);
-    return cents.toString().padStart(12, '0');
-};
+// Kept here so nothing that already imports them from this file breaks.
+const formatAmount = Payload.formatAmount;
+const formatTimestamp = Payload.formatTimestamp;
 
 /**
- * Format timestamp for GIP (YYMMDDHHmmss)
- */
-const formatTimestamp = (date = new Date()) => {
-    const d = new Date(date);
-    const yy = d.getFullYear().toString().slice(-2);
-    const mm = (d.getMonth() + 1).toString().padStart(2, '0');
-    const dd = d.getDate().toString().padStart(2, '0');
-    const hh = d.getHours().toString().padStart(2, '0');
-    const mi = d.getMinutes().toString().padStart(2, '0');
-    const ss = d.getSeconds().toString().padStart(2, '0');
-    return `${yy}${mm}${dd}${hh}${mi}${ss}`;
-};
-
-/**
- * Make GIP API request
+ * Send one message to external API.
  */
 const makeRequest = async (url, payload) => {
     const startTime = Date.now();
@@ -136,244 +98,117 @@ const makeRequest = async (url, payload) => {
 };
 
 /**
- * Name Enquiry (NEC) Request
+ * Shared send-and-log wrapper. Always returns the payload we sent,
+ * so the caller can save the dateTime for a later TSQ.
+ */
+const send = async (label, url, payload, extra = () => ({})) => {
+    gipLogger.request(label, payload);
+    const startTime = Date.now();
+
+    try {
+        const result = await makeRequest(url, payload);
+        const response = {
+            ...result,
+            payload,
+            actionCode: result.data?.actionCode,
+            ...extra(result)
+        };
+        gipLogger.response(label, response, Date.now() - startTime);
+        return response;
+    } catch (error) {
+        gipLogger.error(label, error, Date.now() - startTime);
+        throw error;
+    }
+};
+
+/**
+ * Name enquiry. Checks the name on the account we are about to debit.
  */
 const nameEnquiry = async (txn) => {
-    const payload = {
-        dateTime: formatTimestamp(),
-        sessionId: txn.sessionId,
-        trackingNumber: txn.trackingNumber,
-        functionCode: config.codes.NEC,
-        channelCode: config.codes.CHANNEL,
-        originBank: txn.srcBankCode,
-        destBank: txn.destBankCode,
-        accountToCredit: txn.srcAccountNumber,
-        accountToDebit: txn.destAccountNumber,
-        amount: '000000000000',
-        narration: 'Name Enquiry'
-    };
-
-    gipLogger.request('NEC', payload);
-    const startTime = Date.now();
-
-    try {
-        const result = await makeRequest(config.gip.necUrl, payload);
-        const response = {
-            ...result,
-            payload,
-            actionCode: result.data?.actionCode,
-            accountName: result.data?.nameToDebit || result.data?.nameToCredit
-        };
-        gipLogger.response('NEC', response, Date.now() - startTime);
-        return response;
-    } catch (error) {
-        gipLogger.error('NEC', error, Date.now() - startTime);
-        throw error;
-    }
+    const payload = Payload.buildNameEnquiry(txn);
+    return send('NED', config.gip.necUrl, payload, (result) => ({
+        accountName: result.data?.nameToDebit || result.data?.nameToCredit
+    }));
 };
 
 /**
- * Funds Transfer Debit (FTD) Request
- * Debits the source account - accountToDebit=src, accountToCredit=dest
+ * FTD. Takes the money from the customer.
  */
 const fundsTransferDebit = async (txn) => {
-    const payload = {
-        amount: txn.amountFormatted,
-        dateTime: formatTimestamp(),
-        destBank: txn.destBankCode,
-        narration: txn.narration,
-        sessionId: txn.sessionId,
-        originBank: txn.srcBankCode,
-        callbackUrl: config.gip.callbackUrl,
-        channelCode: config.codes.CHANNEL,
-        nameToDebit: txn.srcAccountName,
-        functionCode: config.codes.FTD,
-        nameToCredit: txn.destAccountName,
-        accountToDebit: txn.srcAccountNumber,
-        trackingNumber: txn.trackingNumber,
-        accountToCredit: txn.destAccountNumber
-    };
-
-    gipLogger.request('FTD', payload);
-    const startTime = Date.now();
-
-    try {
-        const result = await makeRequest(config.gip.ftdUrl, payload);
-        const response = {
-            ...result,
-            payload,
-            actionCode: result.data?.actionCode
-        };
-        gipLogger.response('FTD', response, Date.now() - startTime);
-        return response;
-    } catch (error) {
-        gipLogger.error('FTD', error, Date.now() - startTime);
-        throw error;
-    }
+    const payload = Payload.buildFtd(txn);
+    return send('FTD', config.gip.ftdUrl, payload);
 };
 
 /**
- * Funds Transfer Credit (FTC) Request
- * Credits the destination account - originBank/destBank swapped from FTD
+ * FTC. Gives the money to the requesting bank. Needs its own session and tracking number.
  */
 const fundsTransferCredit = async (txn, ftcSessionId, ftcTrackingNumber) => {
-    const payload = {
-        amount: txn.amountFormatted,
-        dateTime: formatTimestamp(),
-        destBank: txn.srcBankCode,
-        narration: txn.narration,
-        sessionId: ftcSessionId,
-        originBank: txn.destBankCode,
-        callbackUrl: config.gip.callbackUrl,
-        channelCode: config.codes.CHANNEL,
-        nameToDebit: txn.srcAccountName,
-        functionCode: config.codes.FTC,
-        nameToCredit: txn.destAccountName,
-        accountToDebit: txn.srcAccountNumber,
-        trackingNumber: ftcTrackingNumber,
-        accountToCredit: txn.destAccountNumber
-    };
-
-    gipLogger.request('FTC', payload);
-    const startTime = Date.now();
-
-    try {
-        const result = await makeRequest(config.gip.ftcUrl, payload);
-        const response = {
-            ...result,
-            payload,
-            actionCode: result.data?.actionCode
-        };
-        gipLogger.response('FTC', response, Date.now() - startTime);
-        return response;
-    } catch (error) {
-        gipLogger.error('FTC', error, Date.now() - startTime);
-        throw error;
-    }
+    const payload = Payload.buildFtc({ ...txn, ftcSessionId, ftcTrackingNumber });
+    return send('FTC', config.gip.ftcUrl, payload);
 };
 
 /**
- * Reversal Request (swap all src/dest to reverse the original FTD)
- * Debits the original destination and credits the original source
+ * Reversal. Puts the money back. Only used for manual reversals for now.
  */
 const reversal = async (txn, reversalSessionId, reversalTrackingNumber) => {
-    const payload = {
-        amount: txn.amountFormatted,
-        dateTime: formatTimestamp(),
-        destBank: txn.srcBankCode,
-        narration: `REVERSAL: ${txn.narration || 'FTC Failed'}`,
-        sessionId: reversalSessionId,
-        originBank: txn.destBankCode,
-        callbackUrl: config.gip.callbackUrl,
-        channelCode: config.codes.CHANNEL,
-        nameToDebit: txn.destAccountName,
-        functionCode: config.codes.FTD,
-        nameToCredit: txn.srcAccountName,
-        accountToDebit: txn.destAccountNumber,
-        trackingNumber: reversalTrackingNumber,
-        accountToCredit: txn.srcAccountNumber
-    };
-
-    gipLogger.request('REV', payload);
-    const startTime = Date.now();
-
-    try {
-        const result = await makeRequest(config.gip.ftdUrl, payload);
-        const response = {
-            ...result,
-            payload,
-            actionCode: result.data?.actionCode
-        };
-        gipLogger.response('REV', response, Date.now() - startTime);
-        return response;
-    } catch (error) {
-        gipLogger.error('REV', error, Date.now() - startTime);
-        throw error;
-    }
+    const payload = Payload.buildReversal({ ...txn, reversalSessionId, reversalTrackingNumber });
+    return send('REV', config.gip.ftdUrl, payload);
 };
 
 /**
- * Transaction Status Query (TSQ)
- * Uses the original transaction's session/tracking values
- * functionCode 111 for status queries
+ * TSQ. Asks what happened to one leg. Must repeat that leg's original values.
  */
-const transactionStatusQuery = async (txn) => {
-    const payload = {
-        amount: txn.amountFormatted,
-        dateTime: formatTimestamp(),
-        destBank: txn.destBankCode,
-        narration: txn.narration,
-        sessionId: txn.sessionId,
-        originBank: txn.srcBankCode,
-        channelCode: config.codes.CHANNEL,
-        functionCode: config.codes.TSQ,
-        accountToDebit: txn.srcAccountNumber,
-        trackingNumber: txn.trackingNumber,
-        accountToCredit: txn.destAccountNumber
-    };
-
-    gipLogger.request('TSQ', payload);
-    const startTime = Date.now();
-
-    try {
-        const result = await makeRequest(config.gip.tsqUrl, payload);
-        const response = {
-            ...result,
-            payload,
-            actionCode: result.data?.actionCode,
-            statusCode: result.data?.statusCode || result.data?.statusQuery
-        };
-        gipLogger.response('TSQ', response, Date.now() - startTime);
-        return response;
-    } catch (error) {
-        gipLogger.error('TSQ', error, Date.now() - startTime);
-        throw error;
-    }
+const transactionStatusQuery = async (txn, leg = 'FTD') => {
+    const payload = Payload.buildTsq(txn, leg);
+    return send('TSQ', config.gip.tsqUrl, payload, (result) => ({
+        statusCode: result.data?.statusCode || result.data?.statusQuery
+    }));
 };
 
-
 /**
- * Determine what a TSQ response means for the original transaction.
+ * Work out what a TSQ reply means.
+ *
+ *
+ *   ActCode tells us if OUR REQUEST was accepted. It is not the transaction result.
+ *   StatusQuery is the transaction result, and it is only filled in when ActCode is 000.
  */
 const determineTsqAction = (actionCode, statusCode) => {
-    // ActCode 381 / 999 / 990 are faults in our own request - the transaction is untouched.
-    // Retry with corrected values; never mark the transaction failed on these.
+    // 381, 999 and 990 mean our own request was wrong or could not be handled.
+    // The transaction itself is untouched, so never mark it failed on these.
     if (actionCode !== '000') {
         const reasons = {
-            '381': 'Mismatched values vs the original transaction, or a previous-day transaction',
-            '999': 'Field validation error in the TSQ request',
-            '990': 'GTECH error processing the TSQ request'
+            '381': 'Values do not match the original transaction, or it was on an earlier day',
+            '999': 'A required field was missing or wrong in the TSQ request',
+            '990': 'System could not process the TSQ request'
         };
         return {
             action: 'REQUEST_ERROR',
-            message: reasons[actionCode] || `Unrecognised TSQ ActCode: ${actionCode}`,
+            message: reasons[actionCode] || `Unknown TSQ ActCode: ${actionCode}`,
             retryMinutes: 5
         };
     }
 
-    // ActCode 000 without a StatusQuery gives us no outcome to act on.
+    // ActCode 000 with nothing in StatusQuery gives us no result to act on.
     if (!statusCode) {
-        return { action: 'REQUEST_ERROR', message: 'ActCode 000 with no StatusQuery', retryMinutes: 5 };
+        return { action: 'REQUEST_ERROR', message: 'ActCode 000 but no StatusQuery', retryMinutes: 5 };
     }
 
     if (isSuccess(statusCode)) {
         return { action: 'SUCCESS', message: getActionMessage(statusCode) };
     }
     if (statusCode === '990' || isRetryable(statusCode)) {
-        return { action: 'RETRY', message: 'Being processed by receiving institution', retryMinutes: 5 };
+        return { action: 'RETRY', message: 'Still being processed by the other bank', retryMinutes: 5 };
     }
     if (isFatal(statusCode)) {
         return { action: 'FAIL', message: getActionMessage(statusCode) };
     }
 
-    // Unknown status code - retry rather than guess. Exhaustion parks it for a human.
+    // Unknown result. Ask again rather than guess.
     return { action: 'RETRY', message: `Unknown StatusQuery: ${statusCode}`, retryMinutes: 5 };
 };
 
-
-
 /**
- * Check if action code needs TSQ
+ * These replies mean "we do not know yet" and must go to TSQ.
  */
 const isInconclusive = (actionCode) => {
     return config.tsq.inconclusiveCodes.includes(actionCode);
@@ -384,7 +219,7 @@ module.exports = {
     formatAmount,
     formatTimestamp,
 
-    // API calls
+    // Sending
     makeRequest,
     nameEnquiry,
     fundsTransferDebit,
@@ -396,7 +231,7 @@ module.exports = {
     determineTsqAction,
     isInconclusive,
 
-    // Action code helpers (use throughout system)
+    // Action code helpers
     ACTION_CODES,
     SUCCESS_CODES,
     ASYNC_CODES,

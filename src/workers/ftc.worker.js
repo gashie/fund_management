@@ -1,13 +1,15 @@
 /**
  * FTC Worker
- * Initiates FTC after successful FTD - Functional style
+ * Sends the FTC once the FTD has succeeded.
 
  */
 
 const TransactionModel = require('../models/transaction.model');
 const TransactionService = require('../services/transaction.service');
+const EventModel = require('../models/event.model');
 
 const POLL_INTERVAL = 3000;
+const MAX_FTC_ATTEMPTS = 3;
 
 let isRunning = false;
 let logger = console;
@@ -20,17 +22,37 @@ const initiateFtc = async (transaction) => {
     try {
         await TransactionService.processFtc(transaction);
     } catch (error) {
-        // The claim already moved us to FTC_PENDING, so nothing else would retry this row.
-        // Hand it back to FTD_SUCCESS - the FTC was never sent.
         logger.error(`FTC initiation error: ${transaction.id}`, error);
-        await TransactionModel.updateStatus(transaction.id, 'FTD_SUCCESS', {
-            status_message: `FTC send failed, will retry: ${error.message}`
-        });
+
+        // The FTC never went out. Count the try and decide whether to go again.
+        const attempts = await TransactionModel.countFtcAttempt(transaction.id);
+
+        if (attempts >= MAX_FTC_ATTEMPTS) {
+            // The customer's money is already gone and we cannot deliver it.
+            // Stop trying and put it in front of a person.
+            await TransactionModel.updateStatus(transaction.id, 'MANUAL_REVERSAL_REQUIRED', {
+                status_message: `FTC could not be sent after ${attempts} tries: ${error.message}`
+            });
+            await EventModel.createAuditLog({
+                entityType: 'transaction',
+                entityId: transaction.id,
+                action: 'FTC_SEND_FAILED_MAX_ATTEMPTS',
+                details: { attempts, error: error.message },
+                triggeredBy: 'ftc_worker'
+            });
+            logger.error(`FTC gave up after ${attempts} tries: ${transaction.id}`);
+        } else {
+            // Put it back so the next pass tries again.
+            await TransactionModel.updateStatus(transaction.id, 'FTD_SUCCESS', {
+                status_message: `FTC send failed, try ${attempts} of ${MAX_FTC_ATTEMPTS}: ${error.message}`
+            });
+        }
     }
 };
 
 const processFtdSuccess = async () => {
-    // Claim and flip to FTC_PENDING in one committed step - two workers cannot both send an FTC.
+    // Take the rows and change their status in one locked step.
+    // Two workers can never pick up the same transaction.
     const transactions = await TransactionModel.claimByStatus('FTD_SUCCESS', 'FTC_PENDING', 5);
 
     for (const transaction of transactions) {
@@ -65,5 +87,6 @@ module.exports = {
     stop,
     getStatus,
     initiateFtc,
-    processFtdSuccess
+    processFtdSuccess,
+    MAX_FTC_ATTEMPTS
 };
