@@ -1,41 +1,31 @@
 /**
  * Transaction Controller
- * HTTP handlers for NEC, FT, and TSQ operations
- * No database queries - delegates to services
+ * Handles name enquiry, funds transfer and status query for clients.
+ *
  */
 
 const TransactionService = require('../services/transaction.service');
 const TransactionModel = require('../models/transaction.model');
+const { accepted, rejected, reasonFrom, isClientFault } = require('../utils/respond');
 
 /**
- * Name Enquiry (NEC)
- * POST /nec
- *
- * Request: { srcBankCode, destBankCode, srcAccountNumber, destAccountNumber, referenceNumber, requestTimestamp }
- * Response: { responseCode, responseMessage, status, sessionId, destBankCode, destAccountNumber, destAccountName }
+ * Name Enquiry
+ * POST /ne
  */
 exports.nameEnquiry = async (req, res, next) => {
     try {
-        // Validate request
         await TransactionService.validateRequest(req.body, req.institution);
 
-        // Create transaction
         const transaction = await TransactionService.createTransaction(
-            {
-                ...req.body,
-                clientIp: req.ip,
-                userAgent: req.headers['user-agent']
-            },
+            { ...req.body, clientIp: req.ip, userAgent: req.headers['user-agent'] },
             req.institution,
             'NEC'
         );
 
-        // Process NEC (synchronous)
         const result = await TransactionService.processNameEnquiry(transaction);
 
         if (result.success) {
-            res.json({
-                responseCode: result.responseCode,
+            return accepted(res, {
                 responseMessage: 'Approved',
                 status: 'SUCCESSFUL',
                 sessionId: result.sessionId,
@@ -43,102 +33,85 @@ exports.nameEnquiry = async (req, res, next) => {
                 destAccountNumber: req.body.destAccountNumber,
                 destAccountName: result.destAccountName
             });
-        } else {
-            res.json({
-                responseCode: result.responseCode,
-                responseMessage: result.error || 'Failed',
-                status: 'FAILED',
-                sessionId: result.sessionId,
-                destBankCode: req.body.destBankCode,
-                destAccountNumber: req.body.destAccountNumber,
-                destAccountName: null
-            });
         }
+
+        // The account could not be checked. That is a rejection, not a broken request.
+        return rejected(res, result.error || 'Name enquiry failed', {
+            sessionId: result.sessionId,
+            destBankCode: req.body.destBankCode,
+            destAccountNumber: req.body.destAccountNumber,
+            destAccountName: null
+        });
+
     } catch (error) {
-        next(error);
+        if (isClientFault(error)) return rejected(res, reasonFrom(error));
+        return next(error);
     }
 };
 
 /**
- * Funds Transfer (FT)
+ * Funds Transfer
  * POST /ft
- *
- * Request: { srcBankCode, destBankCode, amount, srcAccountNumber, srcAccountName,
- *            destAccountNumber, destAccountName, narration, referenceNumber, requestTimestamp, callbackUrl }
- * Response: { responseCode, responseMessage, referenceNumber, sessionId }
  */
 exports.fundsTransfer = async (req, res, next) => {
     try {
-        // Validate request
         await TransactionService.validateRequest(req.body, req.institution);
 
-        // Create transaction
         const transaction = await TransactionService.createTransaction(
-            {
-                ...req.body,
-                clientIp: req.ip,
-                userAgent: req.headers['user-agent']
-            },
+            { ...req.body, clientIp: req.ip, userAgent: req.headers['user-agent'] },
             req.institution,
             'FT'
         );
 
-        // Initiate FTD (asynchronous - returns immediately)
         const result = await TransactionService.initiateFundsTransfer(transaction);
 
-        res.status(202).json({
-            responseCode: result.responseCode,
-            responseMessage: result.success ? 'success' : 'failed',
+        // 200, not 202. The contract only ever uses 200 for an accepted request.
+        return accepted(res, {
+            responseMessage: 'success',
             referenceNumber: req.body.referenceNumber,
             sessionId: result.sessionId
         });
+
     } catch (error) {
-        next(error);
+        if (isClientFault(error)) {
+            return rejected(res, reasonFrom(error), {
+                referenceNumber: req.body.referenceNumber
+            });
+        }
+        return next(error);
     }
 };
 
 /**
- * Transaction Status Query (TSQ)
+ * Transaction Status Query
  * POST /tsq
- *
- * Request: { srcBankCode, transactionReferenceNumber, transactionTimestamp, requestTimestamp, referenceNumber }
- * Response: { referenceNumber, transactionReferenceNumber, sessionId, srcBankCode, srcAccountNumber,
- *             destBankCode, destAccountNumber, amount, narration, responseCode, responseMessage, status }
  */
 exports.statusQuery = async (req, res, next) => {
     try {
-        const { referenceNumber, transactionReferenceNumber, srcBankCode } = req.body;
-
-        // Search by reference number (client's reference) or transactionReferenceNumber
+        const { referenceNumber, transactionReferenceNumber } = req.body;
         const searchRef = transactionReferenceNumber || referenceNumber;
 
-        // Find the transaction
         let txn = await TransactionModel.findByReference(searchRef, req.institution.id);
 
-        // If not found by exact match, try searching
         if (!txn) {
             const result = await TransactionService.listTransactions({
                 institutionId: req.institution.id,
                 referenceNumber: searchRef,
                 limit: 1
             });
-
             if (result.data.length > 0) {
                 txn = await TransactionModel.findById(result.data[0].id);
             }
         }
 
         if (!txn) {
-            return res.status(404).json({
-                responseCode: '381',
-                responseMessage: 'Transaction not found',
-                status: 'NOT_FOUND',
+            return rejected(res, 'Transaction not found', {
                 referenceNumber,
                 transactionReferenceNumber
             });
         }
 
-        // Determine status text
+        // Work out what to tell the client about this transaction.
         let statusText = 'PENDING';
         let responseMessage = 'Processing';
         let responseCode = '990';
@@ -151,9 +124,18 @@ exports.statusQuery = async (req, res, next) => {
             statusText = 'FAILED';
             responseMessage = txn.status_message || 'Transaction failed';
             responseCode = txn.ftd_action_code || txn.ftc_action_code || '999';
+        } else if (txn.status === 'MANUAL_REVERSAL_REQUIRED') {
+            statusText = 'FAILED';
+            responseMessage = 'Transaction failed - funds return pending';
+            responseCode = txn.ftc_action_code || '999';
+        } else if (txn.status === 'NEEDS_MANUAL_REVIEW') {
+            // We genuinely do not know yet. Say so rather than guess.
+            statusText = 'PENDING';
+            responseMessage = 'Under review';
+            responseCode = '990';
         }
 
-        res.json({
+        res.status(200).json({
             referenceNumber: referenceNumber,
             transactionReferenceNumber: txn.reference_number,
             sessionId: txn.session_id,
@@ -167,22 +149,21 @@ exports.statusQuery = async (req, res, next) => {
             responseMessage,
             status: statusText
         });
+
     } catch (error) {
-        next(error);
+        if (isClientFault(error)) return rejected(res, reasonFrom(error));
+        return next(error);
     }
 };
 
 /**
- * Get transaction by ID
+ * Get transaction by id
  * GET /transactions/:id
  */
 exports.getTransaction = async (req, res, next) => {
     try {
         const result = await TransactionService.getTransaction(req.params.id, req.institution.id);
-        res.json({
-            success: true,
-            data: result
-        });
+        res.json({ success: true, data: result });
     } catch (error) {
         next(error);
     }
@@ -207,26 +188,20 @@ exports.listTransactions = async (req, res, next) => {
             referenceNumber
         });
 
-        res.json({
-            success: true,
-            ...result
-        });
+        res.json({ success: true, ...result });
     } catch (error) {
         next(error);
     }
 };
 
 /**
- * Get statistics (admin)
+ * Statistics
  * GET /stats
  */
 exports.getStats = async (req, res, next) => {
     try {
         const result = await TransactionService.getStats();
-        res.json({
-            success: true,
-            data: result
-        });
+        res.json({ success: true, data: result });
     } catch (error) {
         next(error);
     }

@@ -5,6 +5,10 @@
  */
 
 const Joi = require('joi');
+const { rejected } = require('../utils/respond');
+
+// Endpoints covered by the client contract. These answer 200 with 000 or 100.
+const CLIENT_SCHEMAS = ['nec', 'ft', 'tsq'];
 
 /**
  * Convert snake_case to camelCase
@@ -109,11 +113,19 @@ const validate = (schemaName) => {
             convert: true
         });
 
+    
         if (error) {
             const errors = error.details.map(detail => ({
                 field: detail.path.join('.'),
                 message: detail.message
             }));
+
+            // Put the first problem in plain words, so the client can act on it.
+            const firstProblem = errors[0]?.message || 'Request validation failed';
+
+            if (CLIENT_SCHEMAS.includes(schemaName)) {
+                return rejected(res, firstProblem, { errors });
+            }
 
             return res.status(400).json({
                 responseCode: '400',

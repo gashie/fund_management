@@ -5,6 +5,7 @@
 
 const express = require('express');
 const router = express.Router();
+const { allowCallbackSender, validateCallbackBody } = require('../middleware/callback.middleware');
 
 // Controllers
 const {
@@ -121,19 +122,22 @@ router.get('/transactions',
 // GIP Callback Route (Internal)
 // ============================================================================
 
+
 /**
- * Receive GIP callbacks
- * Should be protected by IP whitelist in production
- * Both paths supported: /callback and /callback/gip
+ * Receive external callbacks.
+ * Sender must be known, and the body must have a session id we can match on.
  */
 router.post('/callback',
+    allowCallbackSender,
+    validateCallbackBody,
     CallbackController.receiveCallback
 );
 
 router.post('/callback/gip',
+    allowCallbackSender,
+    validateCallbackBody,
     CallbackController.receiveCallback
 );
-
 // ============================================================================
 // Admin & Monitoring Routes
 // ============================================================================

@@ -1,17 +1,13 @@
 /**
  * Callback Middleware
- * Only lets known addresses post callbacks to us.
- *
-
- *
- * Why this matters: a callback decides a transaction's outcome. Anyone who can post one
- * with a session id we know could mark a transfer complete, or start a reversal.
+ * Two checks on the way in: is the sender known, and is the body usable.
  *
  */
 
 const config = require('../config');
 const { callbackLogger } = require('../utils/logger');
 const { isSenderAllowed, normalizeIp } = require('./callback.middleware.pure');
+const { checkCallbackBody } = require('./callback.validate.pure');
 
 /**
  * Refuse callbacks from addresses we do not recognise.
@@ -34,8 +30,27 @@ const allowCallbackSender = (req, res, next) => {
     });
 };
 
+/**
+ * Turn away callbacks we could never use, before they reach the database.
+ * Without a session id there is no transaction to match, so there is nothing to do with it.
+ */
+const validateCallbackBody = (req, res, next) => {
+    const result = checkCallbackBody(req.body);
+
+    if (result.ok) return next();
+
+    const from = normalizeIp(req.ip || req.connection?.remoteAddress);
+    callbackLogger.error(`Callback rejected from ${from}: ${result.reason}`, { body: req.body });
+
+    return res.status(400).json({
+        success: false,
+        message: `Callback rejected: ${result.reason}`
+    });
+};
+
 module.exports = {
     allowCallbackSender,
+    validateCallbackBody,
     isSenderAllowed,
     normalizeIp
 };

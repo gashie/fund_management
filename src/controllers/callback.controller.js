@@ -1,42 +1,39 @@
 /**
  * Callback Controller
- * HTTP handlers for receiving GIP callbacks
- * No database queries - delegates to services
+ * Receives callbacks from external systems.
+
  */
 
 const CallbackService = require('../services/callback.service');
 const { callbackLogger } = require('../utils/logger');
 
 /**
- * Receive GIP callback
+ * Receive a callback from an external system
  * POST /callback or /callback/gip
  */
 exports.receiveCallback = async (req, res, next) => {
     const body = req.body;
     const ip = req.ip?.replace('::ffff:', '') || req.connection?.remoteAddress || '-';
 
-    // Log incoming callback with full details
     callbackLogger.incoming(body, ip);
 
     try {
         const callback = await CallbackService.saveGipCallback(body, ip);
 
-        // Log saved
         callbackLogger.saved(callback.id, callback.transaction_id);
 
-        // Return success to GIP immediately
         res.json({
             success: true,
             message: 'Callback received',
             callbackId: callback.id
         });
     } catch (error) {
-        // Still return 200 to GIP to acknowledge receipt
+        // Log everything on our side, tell the caller nothing about our internals.
         callbackLogger.error('Save failed', error);
-        res.json({
+
+        res.status(500).json({
             success: false,
-            message: 'Callback received with errors',
-            error: error.message
+            message: 'Callback could not be stored'
         });
     }
 };
@@ -47,7 +44,6 @@ exports.receiveCallback = async (req, res, next) => {
  */
 exports.listCallbacks = async (req, res, next) => {
     try {
-        // This would need a method in CallbackService
         res.json({
             success: true,
             message: 'List callbacks endpoint'

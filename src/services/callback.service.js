@@ -242,15 +242,16 @@ const processReversalCallback = async (callback, transaction) => {
 
 
 /**
- * Queue client callback
- * Sends callback to client in the expected format:
- * { srcBankCode, srcAccountNumber, referenceNumber, requestTimestamp, sessionId,
- *   destBankCode, destAccountNumber, narration, responseCode, responseMessage, status }
+ * Queue the message we send back to the client when a transfer finishes.
+ *
+
+ *   srcBankCode, srcAccountNumber, referenceNumber, requestTimestamp, sessionId,
+ *   destBankCode, destAccountNumber, narration, amount, responseCode,
+ *   responseMessage, status
  */
 const queueClientCallback = async (transaction, status, message) => {
     if (!transaction.client_callback_url) return;
 
-    // Determine response code and message based on status
     let responseCode = '000';
     let responseMessage = 'Approved';
     let statusText = 'SUCCESSFUL';
@@ -265,7 +266,8 @@ const queueClientCallback = async (transaction, status, message) => {
         statusText = 'SUCCESSFUL';
     }
 
-    // Format timestamp as "YYYY-MM-DD HH:mm:ss"
+    // "YYYY-MM-DD HH:mm:ss". This is the time we send, which matches the contract's
+    // own example: the transfer is at 10:00:00 and its callback at 11:02:00.
     const formatTimestamp = (date) => {
         if (!date) return new Date().toISOString().replace('T', ' ').substring(0, 19);
         const d = new Date(date);
@@ -281,6 +283,8 @@ const queueClientCallback = async (transaction, status, message) => {
         destBankCode: transaction.dest_bank_code,
         destAccountNumber: transaction.dest_account_number,
         narration: transaction.narration,
+        // Sent as text, matching the style of the TSQ reply ("amount": "55").
+        amount: transaction.amount != null ? transaction.amount.toString() : '0',
         responseCode,
         responseMessage,
         status: statusText
@@ -293,6 +297,7 @@ const queueClientCallback = async (transaction, status, message) => {
         payload
     });
 };
+
 
 /**
  * Generate webhook signature
